@@ -1,0 +1,3 @@
+# Bản build của Vite
+dist/
+*.tsbuildinfo

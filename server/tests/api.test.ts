@@ -1,0 +1,270 @@
+import request from 'supertest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { taoApp } from '../src/app.js';
+import { datDb, moDb } from '../src/db/connection.js';
+
+const app = taoApp();
+const api = () => request(app);
+
+// Lớp mẫu: AutoCad_TT ở trường HN (id 4), địa điểm Thạch Thất (id 1)
+const lopMau = {
+  truong_id: 4,
+  dia_diem_id: 1,
+  ten_sheet: 'AutoCad_TT',
+  ma_lop: 'CT.10T1',
+  lop_van_hoa: '11A6',
+  hoc_phan: 'Vẽ kỹ thuật và Autocad',
+  so_buoi_ke_hoach: 15,
+  don_gia: 400,
+};
+
+beforeEach(() => {
+  datDb(moDb(':memory:'));
+});
+
+describe('API trường', () => {
+  it('danh sách có 4 trường seed', async () => {
+    const r = await api().get('/api/truong').expect(200);
+    expect(r.body.map((t: { ma: string }) => t.ma)).toEqual(['GTCT', 'GTVT', 'DANGANH', 'HN']);
+  });
+
+  it('tạo, sửa, xóa', async () => {
+    const tao = await api().post('/api/truong').send({ ma: 'VH', ten: 'Việt-Hung' }).expect(201);
+    expect(tao.body).toMatchObject({ ma: 'VH', da_an: 0 });
+    const sua = await api().put(`/api/truong/${tao.body.id}`).send({ da_an: true }).expect(200);
+    expect(sua.body.da_an).toBe(1);
+    await api().delete(`/api/truong/${tao.body.id}`).expect(204);
+  });
+
+  it('báo lỗi tiếng Việt khi thiếu dữ liệu', async () => {
+    const r = await api().post('/api/truong').send({ ma: '' }).expect(400);
+    expect(r.body.loi).toContain('Mã không được để trống');
+    expect(r.body.loi).toContain('Thiếu Tên');
+  });
+
+  it('trùng mã trường → 409', async () => {
+    const r = await api().post('/api/truong').send({ ma: 'GTCT', ten: 'x' }).expect(409);
+    expect(r.body.loi).toBe('Mã trường "GTCT" đã tồn tại');
+  });
+
+  it('chặn xóa trường còn lớp', async () => {
+    await api().post('/api/lop').send(lopMau).expect(201);
+    const r = await api().delete('/api/truong/4').expect(409);
+    expect(r.body.loi).toContain('Hãy ẩn trường');
+  });
+
+  it('404 khi không có trường', async () => {
+    const r = await api().put('/api/truong/999').send({ ten: 'x' }).expect(404);
+    expect(r.body.loi).toBe('Không tìm thấy trường');
+  });
+});
+
+describe('API địa điểm', () => {
+  it('sửa tiền DC và chặn xóa khi đang dùng', async () => {
+    const r = await api().put('/api/dia-diem/3').send({ tien_dc: 50 }).expect(200);
+    expect(r.body).toMatchObject({ ten_ngan: 'Xuân Mai', tien_dc: 50 });
+    await api().post('/api/lop').send(lopMau).expect(201);
+    await api().delete('/api/dia-diem/1').expect(409);
+    await api().delete('/api/dia-diem/2').expect(204);
+  });
+
+  it('tiền DC âm bị từ chối', async () => {
+    const r = await api().post('/api/dia-diem').send({ ten_ngan: 'A', tien_dc: -1 }).expect(400);
+    expect(r.body.loi).toBe('Tiền DC phải lớn hơn hoặc bằng 0');
+  });
+});
+
+describe('API lớp + buổi', () => {
+  it('validate tên sheet', async () => {
+    const r1 = await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'A/B' }).expect(400);
+    expect(r1.body.loi).toContain('không được chứa');
+    const r2 = await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'x'.repeat(32) }).expect(400);
+    expect(r2.body.loi).toBe('Tên sheet tối đa 31 ký tự');
+    await api().post('/api/lop').send(lopMau).expect(201);
+    const r3 = await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'autocad_tt' }).expect(409);
+    expect(r3.body.loi).toContain('đã có lớp với tên sheet');
+  });
+
+  it('sinh lịch, chấm buổi và tính tiền (ví dụ AutoCad)', async () => {
+    const { body: lop } = await api().post('/api/lop').send(lopMau).expect(201);
+    expect(lop.thu_tu).toBe(1);
+
+    const xem = await api()
+      .post(`/api/lop/${lop.id}/sinh-lich/xem-truoc`)
+      .send({ batDau: '2026-09-23', soBuoi: 15, thu: { '4': 'C', '7': 'SC' } })
+      .expect(200);
+    expect(xem.body.soNgay).toBe(10);
+    expect(xem.body.tongBuoi).toBe(15);
+
+    const tao = await api().post(`/api/lop/${lop.id}/sinh-lich`).send({ ngay: xem.body.ngay }).expect(201);
+    expect(tao.body).toEqual({ soMoi: 10, boQua: 0 });
+    // tạo lại không bị trùng
+    const lai = await api().post(`/api/lop/${lop.id}/sinh-lich`).send({ ngay: xem.body.ngay }).expect(201);
+    expect(lai.body).toEqual({ soMoi: 0, boQua: 10 });
+
+    const { body: ct } = await api().get(`/api/lop/${lop.id}`).expect(200);
+    expect(ct.buoi).toHaveLength(10);
+    expect(ct.ngay_bat_dau).toBe('2026-09-23');
+    expect(ct.ngay_ket_thuc).toBe('2026-10-24');
+    expect(ct.tienDay).toBe(0);
+
+    // chấm theo dự kiến
+    for (const b of ct.buoi) {
+      await api()
+        .patch(`/api/buoi/${b.id}`)
+        .send({ sang: b.du_kien === 'SC', chieu: true })
+        .expect(200);
+    }
+    const { body: sau } = await api().get(`/api/lop/${lop.id}`).expect(200);
+    expect(sau).toMatchObject({ soBuoi: 15, tienDay: 6000, tienDc: 660, tong: 6660, tienDo: 1 });
+
+    const { body: ds } = await api().get('/api/lop?truongId=4').expect(200);
+    expect(ds[0]).toMatchObject({ ten_sheet: 'AutoCad_TT', tong: 6660, soNgay: 10, truong_ma: 'HN' });
+    expect((await api().get('/api/lop?trangThai=hoan_thanh').expect(200)).body).toHaveLength(0);
+  });
+
+  it('sinh lịch Thanh Trì: T5+T6 29/10 → 04/12/2026 ra 12 ngày', async () => {
+    const { body: lop } = await api()
+      .post('/api/lop')
+      .send({ ...lopMau, truong_id: 3, dia_diem_id: null, ten_sheet: 'Mạng Máy tính_Thanh Trì', hoc_phan: 'Mạng máy tính', don_gia: 450 })
+      .expect(201);
+    const r = await api()
+      .post(`/api/lop/${lop.id}/sinh-lich/xem-truoc`)
+      .send({ batDau: '2026-10-29', ketThuc: '2026-12-04', thu: { '5': 'S', '6': 'S' } })
+      .expect(200);
+    expect(r.body.soNgay).toBe(12);
+  });
+
+  it('sinh lịch bỏ qua ngày nghỉ trong cài đặt', async () => {
+    const { body: lop } = await api().post('/api/lop').send(lopMau).expect(201);
+    await api()
+      .put('/api/cai-dat')
+      .send({ ngay_nghi: [{ tu: '2026-11-19', den: '2026-11-20', ten: 'Nghỉ 20/11' }] })
+      .expect(200);
+    const ts = { batDau: '2026-10-29', ketThuc: '2026-12-04', thu: { '5': 'S', '6': 'S' } };
+    const r = await api().post(`/api/lop/${lop.id}/sinh-lich/xem-truoc`).send(ts).expect(200);
+    expect(r.body.soNgay).toBe(10);
+    const r2 = await api()
+      .post(`/api/lop/${lop.id}/sinh-lich/xem-truoc`)
+      .send({ ...ts, boQuaNgayNghi: false })
+      .expect(200);
+    expect(r2.body.soNgay).toBe(12);
+  });
+
+  it('sinh lịch thiếu tham số → lỗi tiếng Việt', async () => {
+    const { body: lop } = await api().post('/api/lop').send(lopMau).expect(201);
+    const r = await api()
+      .post(`/api/lop/${lop.id}/sinh-lich/xem-truoc`)
+      .send({ batDau: '2026-10-29', thu: { '5': 'S' } })
+      .expect(400);
+    expect(r.body.loi).toBe('Cần nhập ngày kết thúc hoặc số buổi');
+  });
+
+  it('thêm ngày lẻ, trùng ngày, sửa, xóa', async () => {
+    const { body: lop } = await api().post('/api/lop').send(lopMau).expect(201);
+    const { body: b } = await api()
+      .post('/api/buoi')
+      .send({ lop_id: lop.id, ngay: '2026-10-25', sang: 1, ghi_chu: 'dạy bù' })
+      .expect(201);
+    expect(b).toMatchObject({ sang: 1, chieu: 0, co_tien_dc: 1, ghi_chu: 'dạy bù' });
+    const trung = await api().post('/api/buoi').send({ lop_id: lop.id, ngay: '2026-10-25' }).expect(409);
+    expect(trung.body.loi).toBe('Lớp đã có ngày 25/10/2026');
+    const ngaySai = await api().post('/api/buoi').send({ lop_id: lop.id, ngay: '2026-02-30' }).expect(400);
+    expect(ngaySai.body.loi).toBe('Ngày không tồn tại');
+    await api().patch(`/api/buoi/${b.id}`).send({ co_tien_dc: false }).expect(200);
+    const { body: ct } = await api().get(`/api/lop/${lop.id}`);
+    expect(ct).toMatchObject({ tienDay: 400, tienDc: 0 });
+    await api().delete(`/api/buoi/${b.id}`).expect(204);
+    await api().delete(`/api/buoi/${b.id}`).expect(404);
+  });
+
+  it('lọc buổi theo khoảng ngày và trường', async () => {
+    const { body: lop } = await api().post('/api/lop').send(lopMau).expect(201);
+    for (const ngay of ['2026-09-30', '2026-10-01', '2026-10-31', '2026-11-01'])
+      await api().post('/api/buoi').send({ lop_id: lop.id, ngay }).expect(201);
+    const r = await api().get('/api/buoi?tu=2026-10-01&den=2026-10-31&truongId=4').expect(200);
+    expect(r.body.map((b: { ngay: string }) => b.ngay)).toEqual(['2026-10-01', '2026-10-31']);
+    expect(r.body[0]).toMatchObject({ ten_sheet: 'AutoCad_TT', truong_ma: 'HN', tien_dc_dia_diem: 66 });
+    expect((await api().get('/api/buoi?truongId=1').expect(200)).body).toHaveLength(0);
+  });
+
+  it('nhân bản lớp không chép ngày dạy', async () => {
+    const { body: lop } = await api().post('/api/lop').send(lopMau).expect(201);
+    await api().post('/api/buoi').send({ lop_id: lop.id, ngay: '2026-10-01', sang: 1 }).expect(201);
+    const { body: nb } = await api().post(`/api/lop/${lop.id}/nhan-ban`).send({ hoc_phan: 'Thiết kế Web' }).expect(201);
+    expect(nb).toMatchObject({ ten_sheet: 'AutoCad_TT_2', hoc_phan: 'Thiết kế Web', ma_lop: 'CT.10T1', thu_tu: 2 });
+    const { body: ct } = await api().get(`/api/lop/${nb.id}`);
+    expect(ct.buoi).toHaveLength(0);
+  });
+
+  it('xóa lớp xóa luôn các ngày', async () => {
+    const { body: lop } = await api().post('/api/lop').send(lopMau).expect(201);
+    await api().post('/api/buoi').send({ lop_id: lop.id, ngay: '2026-10-01' }).expect(201);
+    await api().delete(`/api/lop/${lop.id}`).expect(204);
+    expect((await api().get('/api/buoi').expect(200)).body).toHaveLength(0);
+  });
+});
+
+describe('API thống kê', () => {
+  async function chuanBi() {
+    const { body: hn } = await api().post('/api/lop').send(lopMau).expect(201);
+    const { body: gt } = await api()
+      .post('/api/lop')
+      .send({ ...lopMau, truong_id: 2, dia_diem_id: null, ten_sheet: 'TinHọcVPNC', don_gia: 350 })
+      .expect(201);
+    await api().post('/api/buoi').send({ lop_id: hn.id, ngay: '2026-09-26', sang: 1, chieu: 1 });
+    await api().post('/api/buoi').send({ lop_id: hn.id, ngay: '2026-10-03', chieu: 1 });
+    await api().post('/api/buoi').send({ lop_id: hn.id, ngay: '2026-10-07' }); // chưa dạy
+    await api().post('/api/buoi').send({ lop_id: gt.id, ngay: '2026-10-06', sang: 1, chieu: 1 });
+  }
+
+  it('tổng hợp theo trường và lớp trong kỳ', async () => {
+    await chuanBi();
+    const { body } = await api().get('/api/thong-ke?tu=2026-10-01&den=2026-10-31').expect(200);
+    expect(body.tong).toEqual({ soBuoi: 3, tienDay: 400 + 700, tienDc: 66, tong: 1166 });
+    expect(body.truong.map((t: { ma: string }) => t.ma)).toEqual(['GTVT', 'HN']);
+    const hn = body.truong.find((t: { ma: string }) => t.ma === 'HN');
+    expect(hn.lop[0]).toMatchObject({ ten_sheet: 'AutoCad_TT', soNgay: 2, soBuoi: 1, tong: 466 });
+
+    const loc = await api().get('/api/thong-ke?truongId=4').expect(200);
+    expect(loc.body.tong).toEqual({ soBuoi: 3, tienDay: 1200, tienDc: 132, tong: 1332 });
+  });
+
+  it('theo tháng × trường', async () => {
+    await chuanBi();
+    const { body } = await api().get('/api/thong-ke/thang').expect(200);
+    expect(body.namHoc).toBe('2026-2027');
+    expect(body.thang).toHaveLength(12);
+    expect(body.thang[0]).toMatchObject({ nhan: '09/2026', tong: { tong: 866 } });
+    expect(body.thang[1].theoTruong['2']).toEqual({ soBuoi: 2, tienDay: 700, tienDc: 0, tong: 700 });
+    expect(body.thang[1].theoTruong['4'].tong).toBe(466);
+    expect(body.tong.tong).toBe(866 + 700 + 466);
+  });
+
+  it('khoảng ngày ngược → lỗi', async () => {
+    const r = await api().get('/api/thong-ke?tu=2026-10-31&den=2026-10-01').expect(400);
+    expect(r.body.loi).toBe('"Từ ngày" phải trước "Đến ngày"');
+  });
+});
+
+describe('API cài đặt', () => {
+  it('đọc và ghi', async () => {
+    const { body } = await api().get('/api/cai-dat').expect(200);
+    expect(body).toMatchObject({ ten_gv: 'Đặng Mạnh Hiền', ma_gv: 'G366', ngay_nghi: [] });
+    const r = await api().put('/api/cai-dat').send({ gio_sang: '07h00', nam_hoc: '2027' }).expect(400);
+    expect(r.body.loi).toBe('Năm học phải có dạng 2026-2027');
+    const ok = await api().put('/api/cai-dat').send({ gio_sang: '07h00' }).expect(200);
+    expect(ok.body.gio_sang).toBe('07h00');
+  });
+});
+
+describe('Lỗi chung', () => {
+  it('JSON sai cú pháp và đường dẫn lạ', async () => {
+    const r = await api().post('/api/truong').set('Content-Type', 'application/json').send('{sai').expect(400);
+    expect(r.body.loi).toBe('Dữ liệu gửi lên không phải JSON hợp lệ');
+    const r2 = await api().get('/api/khong-co').expect(404);
+    expect(r2.body.loi).toBe('Không tìm thấy đường dẫn API');
+    const r3 = await api().get('/api/lop/abc').expect(400);
+    expect(r3.body.loi).toBe('Mã số không hợp lệ');
+  });
+});

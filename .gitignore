@@ -1,0 +1,36 @@
+# Thư viện cài bằng npm
+node_modules/
+
+# Bản build giao diện (tạo lại bằng npm run build)
+client/dist/
+
+# Dữ liệu cá nhân: cơ sở dữ liệu, bản sao lưu, mẫu đề tải lên
+data/*
+!data/backups/
+data/backups/*
+!data/backups/.gitkeep
+
+# File Word / Excel đặt tạm ở thư mục gốc (mẫu gốc đã chép vào server/mau-de/goc/)
+/*.doc
+/*.docx
+/*.xls
+/*.xlsx
+# File tạm của Word / Excel khi đang mở
+~$*
+
+# Biến môi trường, khóa bí mật
+.env
+.env.*
+
+# Nhật ký, file tạm
+*.log
+npm-debug.log*
+*.tmp
+coverage/
+
+# Hệ điều hành, trình soạn thảo
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

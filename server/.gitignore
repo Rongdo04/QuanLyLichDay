@@ -1,0 +1,5 @@
+# Dữ liệu test / chạy thử tạm
+*.db
+*.db-*
+_*.ts
+_*.mjs
