@@ -43,22 +43,50 @@ interface NhaCungCap {
   kiemTra(khoa: string): Promise<void>;
 }
 
+// Các mô hình Gemini miễn phí, thử lần lượt: mô hình đang quá tải / hết lượt / chạy quá lâu thì chuyển sang mô hình sau.
+// (Đo ngày 24/10/2026: 3.8-flash rất chậm, có lúc trả 503; 3.6-flash nhanh và ổn định; 2.5-flash đã ngừng cho tài khoản mới.)
+export const MO_HINH_GEMINI = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+const THOI_GIAN_CHO_GEMINI = 120_000; // ms cho mỗi lần thử
+
+// Lỗi tạm thời của riêng mô hình → nên thử mô hình khác
+function nenThuMoHinhKhac(e: unknown): boolean {
+  if (e instanceof LoiGemini) return [404, 429, 500, 502, 503, 504].includes(e.status);
+  return e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError');
+}
+
+export async function goiLanLuot<T>(dsMoHinh: string[], goi: (moHinh: string) => Promise<T>): Promise<T> {
+  let loiCuoi: unknown;
+  for (const moHinh of dsMoHinh) {
+    try {
+      return await goi(moHinh);
+    } catch (e) {
+      if (!nenThuMoHinhKhac(e)) throw e;
+      console.warn(`Gemini ${moHinh} lỗi (${e instanceof LoiGemini ? e.status : (e as Error).name}), thử mô hình khác`);
+      loiCuoi = e;
+    }
+  }
+  throw loiCuoi;
+}
+
 const GEMINI: NhaCungCap = {
   ten: 'Gemini (Google)',
-  mo_hinh: 'gemini-3.8-flash',
+  mo_hinh: MO_HINH_GEMINI[0],
   mien_phi: true,
   bien_moi_truong: 'GEMINI_API_KEY',
   async soan(khoa, heThong, noiDung) {
     const ai = new GoogleGenAI({ apiKey: khoa });
-    const r = await ai.models.generateContent({
-      model: this.mo_hinh,
-      contents: noiDung,
-      config: {
-        systemInstruction: heThong,
-        responseMimeType: 'application/json',
-        responseJsonSchema: JSON_SCHEMA_KET_QUA,
-      },
-    });
+    const r = await goiLanLuot(MO_HINH_GEMINI, (model) =>
+      ai.models.generateContent({
+        model,
+        contents: noiDung,
+        config: {
+          systemInstruction: heThong,
+          responseMimeType: 'application/json',
+          responseJsonSchema: JSON_SCHEMA_KET_QUA,
+          abortSignal: AbortSignal.timeout(THOI_GIAN_CHO_GEMINI),
+        },
+      }),
+    );
     const lyDoDung = r.candidates?.[0]?.finishReason;
     if (lyDoDung === 'SAFETY' || lyDoDung === 'PROHIBITED_CONTENT' || r.promptFeedback?.blockReason)
       throw new LoiApp(422, 'AI từ chối soạn nội dung này. Hãy diễn đạt lại yêu cầu.');
@@ -66,8 +94,11 @@ const GEMINI: NhaCungCap = {
     return docJson(r.text);
   },
   async kiemTra(khoa) {
+    // Kiểm tra key bằng mô hình nhẹ nhất cho nhanh
     const ai = new GoogleGenAI({ apiKey: khoa });
-    await ai.models.generateContent({ model: this.mo_hinh, contents: 'Trả lời đúng một chữ: OK' });
+    await goiLanLuot([...MO_HINH_GEMINI].reverse(), (model) =>
+      ai.models.generateContent({ model, contents: 'Trả lời đúng một chữ: OK', config: { abortSignal: AbortSignal.timeout(30_000) } }),
+    );
   },
 };
 
@@ -211,7 +242,7 @@ Yêu cầu chung:
 - Viết tiếng Việt chuẩn, có dấu, thuật ngữ chuyên ngành đúng như trong giáo trình trung cấp; thuật ngữ tiếng Anh thông dụng giữ nguyên (VD: HTML, CSS, router).
 - Câu hỏi rõ ràng, một nghĩa, học sinh trung cấp làm được trong thời gian thi; không hỏi mẹo, không hỏi kiến thức ngoài chương trình.
 - Đa dạng dạng câu: trình bày khái niệm, liệt kê và giải thích, so sánh / phân biệt, nêu ví dụ, giải thích tình huống thực tế đơn giản. Câu nhiều điểm (từ 3 điểm) nên có 2–3 ý nhỏ a), b), c).
-- Đáp án là hướng dẫn chấm: liệt kê các ý chính học sinh cần nêu, mỗi ý một dòng bắt đầu bằng "- ", cuối mỗi ý ghi số điểm trong ngoặc như "(0,5 điểm)". Tổng điểm các ý đúng bằng điểm của câu. Dùng dấu phẩy cho số thập phân (0,5; 1,5).
+- Đáp án là hướng dẫn chấm: liệt kê các ý chính học sinh cần nêu, mỗi ý một dòng bắt đầu bằng "- ", cuối mỗi ý ghi số điểm trong ngoặc như "(0,5 điểm)". Tổng điểm các ý đúng bằng điểm của câu. Điểm mỗi ý là bội số của 0,25 (0,25; 0,5; 0,75; 1…), không dùng số lẻ như 0,33. Dùng dấu phẩy cho số thập phân.
 - Không trùng hoặc gần trùng với các câu đã có trong ngân hàng.`;
 
 function moTaYeuCau(mon: Mon, y: YeuCauSoan, cauDaCo: Pick<CauHoi, 'noi_dung'>[]): string {
@@ -269,8 +300,8 @@ function loiAi(e: unknown, ma: MaNhaCungCap): LoiApp {
     if (e.status === 403) return new LoiApp(400, 'API key Gemini không có quyền dùng Gemini API (kiểm tra dự án trong Google AI Studio)');
     if (e.status === 429)
       return new LoiApp(429, 'Đã hết lượt dùng miễn phí của Gemini trong lúc này. Chờ một lát (hoặc sang ngày mai) rồi thử lại.');
-    if (e.status === 404) return new LoiApp(502, `Mô hình ${NHA_CUNG_CAP.gemini.mo_hinh} không dùng được với key này`);
-    if (e.status >= 500) return new LoiApp(502, `Gemini đang lỗi (${e.status}), thử lại sau`);
+    if (e.status === 404) return new LoiApp(502, 'Các mô hình Gemini miễn phí đều không dùng được với key này');
+    if (e.status >= 500) return new LoiApp(502, 'Máy chủ Gemini đang quá tải (đã thử cả các mô hình dự phòng). Chờ vài phút rồi thử lại.');
     return new LoiApp(400, `Gemini báo lỗi: ${e.message}`);
   }
   if (e instanceof Anthropic.AuthenticationError) return new LoiApp(400, 'API key Claude không đúng hoặc đã bị thu hồi');
@@ -283,6 +314,8 @@ function loiAi(e: unknown, ma: MaNhaCungCap): LoiApp {
   }
   if (e instanceof Anthropic.APIConnectionError) return new LoiApp(503, 'Không kết nối được tới AI. Kiểm tra mạng Internet rồi thử lại.');
   if (e instanceof Anthropic.APIError) return new LoiApp(502, `AI đang lỗi (${e.status ?? '?'}), thử lại sau`);
+  if (e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError'))
+    return new LoiApp(504, 'AI trả lời quá lâu. Hãy thử lại hoặc giảm số câu mỗi lần soạn.');
   // Lỗi mạng của fetch (Gemini SDK)
   if (e instanceof TypeError && /fetch|network|ENOTFOUND|ECONN/i.test(`${e.message} ${(e as { cause?: Error }).cause?.message ?? ''}`))
     return new LoiApp(503, 'Không kết nối được tới AI. Kiểm tra mạng Internet rồi thử lại.');

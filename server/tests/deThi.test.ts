@@ -17,7 +17,8 @@ const thuMucTam = vi.hoisted(() => {
 import { taoApp } from '../src/app.js';
 import { datDb, moDb } from '../src/db/connection.js';
 import { THU_MUC_MAU_SAN } from '../src/repositories/mauDe.js';
-import { datNhaCungCap } from '../src/services/aiSoanCau.js';
+import { ApiError } from '@google/genai';
+import { datNhaCungCap, goiLanLuot } from '../src/services/aiSoanCau.js';
 import { bocDe, dinhDangDiem, type CauNganHang } from '../src/services/bocDe.js';
 import { dienMau, kiemTraMau } from '../src/services/mauWord.js';
 import { phanTichVanBan } from '../src/services/phanTichCauHoi.js';
@@ -369,7 +370,7 @@ describe('AI soạn câu hỏi', () => {
     const r = await api().post(`/api/mon/${mon.id}/ai-soan`).send({ so_cau: 3, diem: [3, 3, 4] }).expect(400);
     expect(r.body.loi).toContain('API key của Gemini');
     const tt = (await api().get('/api/ai').expect(200)).body;
-    expect(tt).toMatchObject({ dang_dung: 'gemini', co_khoa: false, mo_hinh: 'gemini-3.8-flash' });
+    expect(tt).toMatchObject({ dang_dung: 'gemini', co_khoa: false, mo_hinh: 'gemini-3.6-flash' });
     expect(tt.nha_cung_cap.map((n: { ma: string }) => n.ma)).toEqual(['gemini', 'claude']);
   });
 
@@ -425,3 +426,29 @@ describe('AI soạn câu hỏi', () => {
     expect(goi).toBe(1);
   });
 });
+
+describe('Gemini: chuyển mô hình dự phòng', () => {
+  it('mô hình quá tải (503) hoặc chạy quá lâu thì thử mô hình sau', async () => {
+    const daThu: string[] = [];
+    const kq = await goiLanLuot(['a', 'b', 'c'], async (m) => {
+      daThu.push(m);
+      if (m === 'a') throw new ApiError({ status: 503, message: 'overloaded' });
+      if (m === 'b') throw Object.assign(new Error('quá lâu'), { name: 'TimeoutError' });
+      return `ok-${m}`;
+    });
+    expect(kq).toBe('ok-c');
+    expect(daThu).toEqual(['a', 'b', 'c']);
+  });
+
+  it('key sai (400) thì dừng ngay, không thử tiếp', async () => {
+    const daThu: string[] = [];
+    await expect(
+      goiLanLuot(['a', 'b'], async (m) => {
+        daThu.push(m);
+        throw new ApiError({ status: 400, message: 'API key not valid' });
+      }),
+    ).rejects.toThrow('API key not valid');
+    expect(daThu).toEqual(['a']);
+  });
+});
+
