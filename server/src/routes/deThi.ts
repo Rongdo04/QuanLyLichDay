@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { dsMauDe, docTepMau, layMauDe, suaMauDe, taoMauDe, thayTepMau, xoaMauDe } from '../repositories/mauDe.js';
 import { layTruong } from '../repositories/truong.js';
-import { ghiKhoaApi, kiemTraKhoa, trangThaiKhoa } from '../services/aiSoanCau.js';
+import { capNhatAi, trangThaiKhoa } from '../services/aiSoanCau.js';
 import { docFileWord } from '../services/chuyenDoc.js';
 import { CAC_O_DIEN, kiemTraMau } from '../services/mauWord.js';
 import { dsDeThi, fileDeThi, goiYDeThi, layDeThi, taoDeThi, xemTruocDe, xoaDeThi } from '../services/sinhDe.js';
@@ -204,14 +204,16 @@ aiRouter.get('/', (_req, res) => {
   res.json(trangThaiKhoa());
 });
 
+// Chọn nhà cung cấp; có key mới thì gọi thử rồi mới lưu; khoa: null = xóa key
 aiRouter.put(
   '/',
   bocAsync(async (req, res) => {
-    const { khoa } = z
-      .object({ khoa: z.string().trim().max(300).nullish().transform((v) => v || null) })
+    const d = z
+      .object({
+        nha_cung_cap: z.enum(['gemini', 'claude']),
+        khoa: z.string().trim().max(300).nullish().transform((v) => (v === '' ? undefined : v)),
+      })
       .parse(req.body);
-    if (khoa) await kiemTraKhoa(khoa); // chỉ lưu key gọi được
-    ghiKhoaApi(khoa);
-    res.json(trangThaiKhoa());
+    res.json(await capNhatAi(d.nha_cung_cap, d.khoa));
   }),
 );

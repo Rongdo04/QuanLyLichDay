@@ -22,7 +22,7 @@ Máy cần cài **Node.js bản LTS** (https://nodejs.org).
 Vào mục **Đề thi**. Đề là đề lý thuyết tự luận, mỗi lần sinh được nhiều đề, kèm đáp án và thang điểm.
 
 1. **Ngân hàng câu hỏi:** mỗi môn có một ngân hàng câu hỏi riêng. Môn đặt tên giống học phần của lớp để phần mềm tự nhận ra. Có 3 cách đưa câu hỏi vào:
-   - **AI soạn câu hỏi:** cần API key của Claude, nhập trong *Cài đặt → AI soạn câu hỏi*. Cần có mạng và trả phí theo lượt dùng. Câu AI soạn chỉ được lưu sau khi thầy đọc và duyệt.
+   - **AI soạn câu hỏi:** mặc định dùng **Gemini của Google (miễn phí)**: lấy key tại https://aistudio.google.com/apikey rồi dán vào *Cài đặt → AI soạn câu hỏi*. Có thể chuyển sang Claude (trả phí). Cần có mạng. Câu AI soạn chỉ được lưu sau khi thầy đọc và duyệt.
    - **Dán câu hỏi từ Word:** chép đề cũ vào, phần mềm tự tách từng câu, điểm và đáp án.
    - **Thêm câu:** gõ từng câu bằng tay.
 2. **Sinh đề:**

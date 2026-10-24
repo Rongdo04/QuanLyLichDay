@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
+import { ApiError as LoiGemini, GoogleGenAI } from '@google/genai';
 import { z as z4 } from 'zod/v4';
 import { layDb } from '../db/connection.js';
 import type { CauHoi, MucDo } from '../repositories/cauHoi.js';
@@ -7,42 +8,13 @@ import type { Mon } from '../repositories/mon.js';
 import { LoiApp } from '../utils/loi.js';
 import { dinhDangDiem, NHAN_MUC_DO } from './bocDe.js';
 
-// AI (Claude) soạn câu hỏi tự luận lý thuyết kèm đáp án cho ngân hàng câu hỏi.
+// AI soạn câu hỏi tự luận lý thuyết kèm đáp án cho ngân hàng câu hỏi.
+// Hỗ trợ Gemini (Google, có gói miễn phí — mặc định) và Claude (Anthropic, trả phí).
 // Câu AI soạn chỉ là bản nháp: thầy duyệt, sửa rồi mới lưu vào ngân hàng.
 
-export const MO_HINH = 'claude-opus-5-5';
-const KHOA_API = 'bi_mat_anthropic_api_key';
+export type MaNhaCungCap = 'gemini' | 'claude';
 
-// ---- API key: lưu trong cai_dat (máy local), hoặc biến môi trường ANTHROPIC_API_KEY ----
-
-export function layKhoaApi(): { khoa: string | null; nguon: 'cai_dat' | 'moi_truong' | null } {
-  const r = layDb().prepare('SELECT gia_tri FROM cai_dat WHERE khoa = ?').get(KHOA_API) as { gia_tri: string } | undefined;
-  if (r?.gia_tri) return { khoa: r.gia_tri, nguon: 'cai_dat' };
-  if (process.env.ANTHROPIC_API_KEY) return { khoa: process.env.ANTHROPIC_API_KEY, nguon: 'moi_truong' };
-  return { khoa: null, nguon: null };
-}
-
-export function ghiKhoaApi(khoa: string | null) {
-  if (khoa) {
-    layDb()
-      .prepare('INSERT INTO cai_dat (khoa, gia_tri) VALUES (?, ?) ON CONFLICT(khoa) DO UPDATE SET gia_tri = excluded.gia_tri')
-      .run(KHOA_API, khoa);
-  } else layDb().prepare('DELETE FROM cai_dat WHERE khoa = ?').run(KHOA_API);
-}
-
-// Chỉ hiện vài ký tự cuối, không bao giờ trả key đầy đủ ra giao diện
-export function trangThaiKhoa() {
-  const { khoa, nguon } = layKhoaApi();
-  return { co_khoa: !!khoa, nguon, khoa_an: khoa ? `${khoa.slice(0, 7)}…${khoa.slice(-4)}` : null, mo_hinh: MO_HINH };
-}
-
-let taoClient = (apiKey: string): Pick<Anthropic, 'beta'> => new Anthropic({ apiKey, timeout: 5 * 60 * 1000 });
-// Dùng trong test: thay client thật bằng client giả
-export function datTaoClient(f: typeof taoClient) {
-  taoClient = f;
-}
-
-// ---- Soạn câu hỏi ----
+// ---- Kết quả AI phải trả về ----
 
 const SchemaKetQua = z4.object({
   cau_hoi: z4.array(
@@ -55,6 +27,167 @@ const SchemaKetQua = z4.object({
     }),
   ),
 });
+type KetQuaAi = z4.infer<typeof SchemaKetQua>;
+
+// JSON Schema cho Gemini (bỏ khóa $schema)
+const { $schema: _boQua, ...JSON_SCHEMA_KET_QUA } = z4.toJSONSchema(SchemaKetQua) as Record<string, unknown>;
+
+// ---- Các nhà cung cấp ----
+
+interface NhaCungCap {
+  ten: string;
+  mo_hinh: string;
+  mien_phi: boolean;
+  bien_moi_truong: string;
+  soan(khoa: string, heThong: string, noiDung: string): Promise<KetQuaAi>;
+  kiemTra(khoa: string): Promise<void>;
+}
+
+const GEMINI: NhaCungCap = {
+  ten: 'Gemini (Google)',
+  mo_hinh: 'gemini-3.8-flash',
+  mien_phi: true,
+  bien_moi_truong: 'GEMINI_API_KEY',
+  async soan(khoa, heThong, noiDung) {
+    const ai = new GoogleGenAI({ apiKey: khoa });
+    const r = await ai.models.generateContent({
+      model: this.mo_hinh,
+      contents: noiDung,
+      config: {
+        systemInstruction: heThong,
+        responseMimeType: 'application/json',
+        responseJsonSchema: JSON_SCHEMA_KET_QUA,
+      },
+    });
+    const lyDoDung = r.candidates?.[0]?.finishReason;
+    if (lyDoDung === 'SAFETY' || lyDoDung === 'PROHIBITED_CONTENT' || r.promptFeedback?.blockReason)
+      throw new LoiApp(422, 'AI từ chối soạn nội dung này. Hãy diễn đạt lại yêu cầu.');
+    if (lyDoDung === 'MAX_TOKENS') throw new LoiApp(422, 'AI trả lời quá dài nên bị cắt. Hãy giảm số câu mỗi lần soạn.');
+    return docJson(r.text);
+  },
+  async kiemTra(khoa) {
+    const ai = new GoogleGenAI({ apiKey: khoa });
+    await ai.models.generateContent({ model: this.mo_hinh, contents: 'Trả lời đúng một chữ: OK' });
+  },
+};
+
+const CLAUDE: NhaCungCap = {
+  ten: 'Claude (Anthropic)',
+  mo_hinh: 'claude-opus-5-5',
+  mien_phi: false,
+  bien_moi_truong: 'ANTHROPIC_API_KEY',
+  async soan(khoa, heThong, noiDung) {
+    const client = new Anthropic({ apiKey: khoa, timeout: 5 * 60 * 1000 });
+    const r = await client.beta.messages.parse({
+      model: this.mo_hinh,
+      max_tokens: 16000,
+      output_config: { effort: 'medium', format: betaZodOutputFormat(SchemaKetQua) },
+      // Nếu bị bộ lọc an toàn từ chối nhầm, máy chủ tự chạy lại bằng mô hình dự phòng
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: heThong,
+      messages: [{ role: 'user', content: noiDung }],
+    });
+    if (r.stop_reason === 'refusal') throw new LoiApp(422, 'AI từ chối soạn nội dung này. Hãy diễn đạt lại yêu cầu.');
+    if (r.stop_reason === 'max_tokens') throw new LoiApp(422, 'AI trả lời quá dài nên bị cắt. Hãy giảm số câu mỗi lần soạn.');
+    if (!r.parsed_output) throw new LoiApp(502, 'AI trả kết quả không đúng định dạng. Hãy thử lại.');
+    return r.parsed_output;
+  },
+  async kiemTra(khoa) {
+    const client = new Anthropic({ apiKey: khoa });
+    await client.messages.create({
+      model: this.mo_hinh,
+      max_tokens: 64,
+      output_config: { effort: 'low' },
+      messages: [{ role: 'user', content: 'Trả lời đúng một chữ: OK' }],
+    });
+  },
+};
+
+const NHA_CUNG_CAP: Record<MaNhaCungCap, NhaCungCap> = { gemini: GEMINI, claude: CLAUDE };
+
+// Dùng trong test: thay cách gọi AI thật bằng hàm giả
+export function datNhaCungCap(ma: MaNhaCungCap, thay: Partial<Pick<NhaCungCap, 'soan' | 'kiemTra'>>) {
+  Object.assign(NHA_CUNG_CAP[ma], thay);
+}
+
+function docJson(text: string | undefined): KetQuaAi {
+  let du: unknown;
+  try {
+    du = JSON.parse(text ?? '');
+  } catch {
+    throw new LoiApp(502, 'AI trả kết quả không đúng định dạng. Hãy thử lại.');
+  }
+  const kq = SchemaKetQua.safeParse(du);
+  if (!kq.success) throw new LoiApp(502, 'AI trả kết quả thiếu thông tin. Hãy thử lại.');
+  return kq.data;
+}
+
+// ---- Cấu hình: nhà cung cấp đang dùng + API key (lưu trong cai_dat trên máy, hoặc biến môi trường) ----
+
+const KHOA_CHON = 'ai_nha_cung_cap';
+const khoaLuu = (ma: MaNhaCungCap) => (ma === 'claude' ? 'bi_mat_anthropic_api_key' : 'bi_mat_gemini_api_key');
+
+function docCaiDat(khoa: string): string | null {
+  const r = layDb().prepare('SELECT gia_tri FROM cai_dat WHERE khoa = ?').get(khoa) as { gia_tri: string } | undefined;
+  return r?.gia_tri || null;
+}
+function ghiCaiDat(khoa: string, giaTri: string | null) {
+  if (giaTri) {
+    layDb()
+      .prepare('INSERT INTO cai_dat (khoa, gia_tri) VALUES (?, ?) ON CONFLICT(khoa) DO UPDATE SET gia_tri = excluded.gia_tri')
+      .run(khoa, giaTri);
+  } else layDb().prepare('DELETE FROM cai_dat WHERE khoa = ?').run(khoa);
+}
+
+export function layKhoaApi(ma: MaNhaCungCap): { khoa: string | null; nguon: 'cai_dat' | 'moi_truong' | null } {
+  const luu = docCaiDat(khoaLuu(ma));
+  if (luu) return { khoa: luu, nguon: 'cai_dat' };
+  const env = process.env[NHA_CUNG_CAP[ma].bien_moi_truong];
+  if (env) return { khoa: env, nguon: 'moi_truong' };
+  return { khoa: null, nguon: null };
+}
+
+export function nhaCungCapDangDung(): MaNhaCungCap {
+  return docCaiDat(KHOA_CHON) === 'claude' ? 'claude' : 'gemini';
+}
+
+// Chỉ hiện vài ký tự đầu/cuối, không bao giờ trả key đầy đủ ra giao diện
+export function trangThaiKhoa() {
+  const dangDung = nhaCungCapDangDung();
+  const moTa = (ma: MaNhaCungCap) => {
+    const { khoa, nguon } = layKhoaApi(ma);
+    const n = NHA_CUNG_CAP[ma];
+    return {
+      ma,
+      ten: n.ten,
+      mo_hinh: n.mo_hinh,
+      mien_phi: n.mien_phi,
+      co_khoa: !!khoa,
+      nguon,
+      khoa_an: khoa ? `${khoa.slice(0, 5)}…${khoa.slice(-4)}` : null,
+    };
+  };
+  const ds = (['gemini', 'claude'] as const).map(moTa);
+  const hienTai = ds.find((d) => d.ma === dangDung)!;
+  return { dang_dung: dangDung, co_khoa: hienTai.co_khoa, mo_hinh: hienTai.mo_hinh, ten: hienTai.ten, nha_cung_cap: ds };
+}
+
+// Lưu key (gọi thử trước, chỉ lưu key dùng được) và chọn nhà cung cấp đang dùng
+export async function capNhatAi(ma: MaNhaCungCap, khoa: string | null | undefined) {
+  if (khoa) {
+    try {
+      await NHA_CUNG_CAP[ma].kiemTra(khoa);
+    } catch (e) {
+      throw loiAi(e, ma);
+    }
+    ghiCaiDat(khoaLuu(ma), khoa);
+  } else if (khoa === null) ghiCaiDat(khoaLuu(ma), null);
+  ghiCaiDat(KHOA_CHON, ma);
+  return trangThaiKhoa();
+}
+
+// ---- Soạn câu hỏi ----
 
 export interface YeuCauSoan {
   so_cau: number;
@@ -105,55 +238,43 @@ function moTaYeuCau(mon: Mon, y: YeuCauSoan, cauDaCo: Pick<CauHoi, 'noi_dung'>[]
 }
 
 export async function soanCauHoi(mon: Mon, y: YeuCauSoan, cauDaCo: Pick<CauHoi, 'noi_dung'>[]): Promise<CauAiSoan[]> {
-  const { khoa } = layKhoaApi();
-  if (!khoa) throw new LoiApp(400, 'Chưa có API key của Claude. Vào Cài đặt → "AI soạn câu hỏi" để nhập key.');
-  const client = taoClient(khoa);
-  let phanHoi;
+  const ma = nhaCungCapDangDung();
+  const { khoa } = layKhoaApi(ma);
+  if (!khoa) throw new LoiApp(400, `Chưa có API key của ${NHA_CUNG_CAP[ma].ten}. Vào Cài đặt → "AI soạn câu hỏi" để nhập key.`);
+  let kq: KetQuaAi;
   try {
-    phanHoi = await client.beta.messages.parse({
-      model: MO_HINH,
-      max_tokens: 16000,
-      output_config: { effort: 'medium', format: betaZodOutputFormat(SchemaKetQua) },
-      // Nếu bị bộ lọc an toàn từ chối nhầm, máy chủ tự chạy lại bằng mô hình dự phòng
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      system: HE_THONG,
-      messages: [{ role: 'user', content: moTaYeuCau(mon, y, cauDaCo) }],
-    });
+    kq = await NHA_CUNG_CAP[ma].soan(khoa, HE_THONG, moTaYeuCau(mon, y, cauDaCo));
   } catch (e) {
-    throw loiAi(e);
+    throw loiAi(e, ma);
   }
-  if (phanHoi.stop_reason === 'refusal') throw new LoiApp(422, 'AI từ chối soạn nội dung này. Hãy diễn đạt lại yêu cầu.');
-  if (phanHoi.stop_reason === 'max_tokens') throw new LoiApp(422, 'AI trả lời quá dài nên bị cắt. Hãy giảm số câu mỗi lần soạn.');
-  const kq = phanHoi.parsed_output;
-  if (!kq) throw new LoiApp(502, 'AI trả kết quả không đúng định dạng. Hãy thử lại.');
-  return kq.cau_hoi.map((c) => ({
-    chu_de: c.chu_de.trim() || y.chu_de,
-    muc_do: c.muc_do,
-    diem: c.diem > 0 ? c.diem : y.diem[0],
-    noi_dung: c.noi_dung.trim(),
-    dap_an: c.dap_an.trim(),
-  }));
+  return kq.cau_hoi
+    .filter((c) => c.noi_dung.trim())
+    .map((c) => ({
+      chu_de: c.chu_de.trim() || y.chu_de,
+      muc_do: c.muc_do,
+      diem: c.diem > 0 ? c.diem : y.diem[0],
+      noi_dung: c.noi_dung.trim(),
+      dap_an: c.dap_an.trim(),
+    }));
 }
 
-// Kiểm tra key bằng một lời gọi rất nhỏ
-export async function kiemTraKhoa(khoa: string): Promise<void> {
-  try {
-    await taoClient(khoa).beta.messages.create({
-      model: MO_HINH,
-      max_tokens: 64,
-      output_config: { effort: 'low' },
-      messages: [{ role: 'user', content: 'Trả lời đúng một chữ: OK' }],
-    });
-  } catch (e) {
-    throw loiAi(e);
-  }
-}
+// ---- Lỗi gọi AI → thông báo tiếng Việt ----
 
-function loiAi(e: unknown): LoiApp {
+function loiAi(e: unknown, ma: MaNhaCungCap): LoiApp {
   if (e instanceof LoiApp) return e;
-  if (e instanceof Anthropic.AuthenticationError) return new LoiApp(400, 'API key không đúng hoặc đã bị thu hồi');
-  if (e instanceof Anthropic.PermissionDeniedError) return new LoiApp(400, 'API key không có quyền dùng mô hình này');
+  const ten = NHA_CUNG_CAP[ma].ten;
+  if (e instanceof LoiGemini) {
+    const m = e.message.toLowerCase();
+    if (m.includes('api key') || m.includes('api_key') || e.status === 401) return new LoiApp(400, 'API key Gemini không đúng hoặc đã bị xóa');
+    if (e.status === 403) return new LoiApp(400, 'API key Gemini không có quyền dùng Gemini API (kiểm tra dự án trong Google AI Studio)');
+    if (e.status === 429)
+      return new LoiApp(429, 'Đã hết lượt dùng miễn phí của Gemini trong lúc này. Chờ một lát (hoặc sang ngày mai) rồi thử lại.');
+    if (e.status === 404) return new LoiApp(502, `Mô hình ${NHA_CUNG_CAP.gemini.mo_hinh} không dùng được với key này`);
+    if (e.status >= 500) return new LoiApp(502, `Gemini đang lỗi (${e.status}), thử lại sau`);
+    return new LoiApp(400, `Gemini báo lỗi: ${e.message}`);
+  }
+  if (e instanceof Anthropic.AuthenticationError) return new LoiApp(400, 'API key Claude không đúng hoặc đã bị thu hồi');
+  if (e instanceof Anthropic.PermissionDeniedError) return new LoiApp(400, 'API key Claude không có quyền dùng mô hình này');
   if (e instanceof Anthropic.RateLimitError) return new LoiApp(429, 'Gọi AI quá nhiều trong thời gian ngắn, chờ một lát rồi thử lại');
   if (e instanceof Anthropic.BadRequestError) {
     const m = e.message.toLowerCase();
@@ -162,5 +283,8 @@ function loiAi(e: unknown): LoiApp {
   }
   if (e instanceof Anthropic.APIConnectionError) return new LoiApp(503, 'Không kết nối được tới AI. Kiểm tra mạng Internet rồi thử lại.');
   if (e instanceof Anthropic.APIError) return new LoiApp(502, `AI đang lỗi (${e.status ?? '?'}), thử lại sau`);
-  return new LoiApp(500, `Lỗi khi gọi AI: ${(e as Error).message}`);
+  // Lỗi mạng của fetch (Gemini SDK)
+  if (e instanceof TypeError && /fetch|network|ENOTFOUND|ECONN/i.test(`${e.message} ${(e as { cause?: Error }).cause?.message ?? ''}`))
+    return new LoiApp(503, 'Không kết nối được tới AI. Kiểm tra mạng Internet rồi thử lại.');
+  return new LoiApp(500, `Lỗi khi gọi ${ten}: ${(e as Error).message}`);
 }

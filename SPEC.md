@@ -381,7 +381,7 @@ Yêu cầu của thầy: sinh đề thi tự động theo môn và theo trườn
   - Giữa các đề không dùng chung câu nếu ngân hàng đủ câu.
   - Ưu tiên đúng mức độ, đúng điểm, khác chủ đề và câu ít được dùng.
   - Thiếu câu thì cảnh báo, không âm thầm bỏ qua.
-- **AI** (`services/aiSoanCau.ts`):
+- **AI** (`services/aiSoanCau.ts`): hỗ trợ hai nhà cung cấp, chọn trong Cài đặt. **Mặc định Gemini `gemini-3.8-flash`** (có gói miễn phí, gọi bằng SDK `@google/genai` với `responseJsonSchema`). Claude là lựa chọn trả phí. Mỗi nhà cung cấp có key riêng (`bi_mat_gemini_api_key`, `bi_mat_anthropic_api_key`). Chi tiết phần Claude:
   - Dùng Claude `claude-opus-5-5` với structured output, effort `medium`, và `fallbacks: "default"` (máy chủ tự chạy lại bằng mô hình dự phòng nếu bộ lọc an toàn từ chối nhầm).
   - Gửi kèm đề cương môn và các câu đã có để tránh trùng.
   - Kết quả chỉ là bản nháp; thầy duyệt rồi mới lưu.

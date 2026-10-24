@@ -668,11 +668,11 @@ function AiSoan({ monId, dsChuDe, onXong }: { monId: number; dsChuDe: string[]; 
     return (
       <div className="space-y-3 text-sm">
         <p>
-          Để AI soạn câu hỏi, cần có <b>API key của Claude</b> (tài khoản tại{' '}
-          <a className="lien-ket" href="https://console.anthropic.com" target="_blank" rel="noreferrer">
-            console.anthropic.com
+          Để AI soạn câu hỏi, cần có <b>API key của {ai?.ten ?? 'AI'}</b>. Gemini của Google có <b>gói miễn phí</b>: lấy key tại{' '}
+          <a className="lien-ket" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">
+            aistudio.google.com/apikey
           </a>
-          , trả phí theo lượt dùng).
+          .
         </p>
         <Link className="btn-chinh" to="/cai-dat#ai">
           Nhập API key trong Cài đặt

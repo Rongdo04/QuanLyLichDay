@@ -9,6 +9,7 @@ import type {
   DuLieuMon,
   GoiYDeThi,
   KetQuaXemTruocDe,
+  MaNhaCungCap,
   MauDe,
   Mon,
   OCau,
@@ -186,7 +187,7 @@ export const api = {
   },
   ai: {
     lay: () => goiApi<TrangThaiAi>('/ai'),
-    ghi: (khoa: string | null) => goiApi<TrangThaiAi>('/ai', { method: 'PUT', json: { khoa } }),
+    ghi: (d: { nha_cung_cap: MaNhaCungCap; khoa?: string | null }) => goiApi<TrangThaiAi>('/ai', { method: 'PUT', json: d }),
   },
   // Tải file: dùng đường dẫn trực tiếp cho thẻ <a>
   xuat: {

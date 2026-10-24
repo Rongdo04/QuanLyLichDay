@@ -379,9 +379,22 @@ export interface DeThiTomTat {
   so_cau: number;
 }
 
-export interface TrangThaiAi {
+export type MaNhaCungCap = 'gemini' | 'claude';
+
+export interface NhaCungCapAi {
+  ma: MaNhaCungCap;
+  ten: string;
+  mo_hinh: string;
+  mien_phi: boolean;
   co_khoa: boolean;
   nguon: 'cai_dat' | 'moi_truong' | null;
   khoa_an: string | null;
+}
+
+export interface TrangThaiAi {
+  dang_dung: MaNhaCungCap;
+  co_khoa: boolean;
   mo_hinh: string;
+  ten: string;
+  nha_cung_cap: NhaCungCapAi[];
 }

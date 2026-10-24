@@ -17,7 +17,7 @@ const thuMucTam = vi.hoisted(() => {
 import { taoApp } from '../src/app.js';
 import { datDb, moDb } from '../src/db/connection.js';
 import { THU_MUC_MAU_SAN } from '../src/repositories/mauDe.js';
-import { datTaoClient } from '../src/services/aiSoanCau.js';
+import { datNhaCungCap } from '../src/services/aiSoanCau.js';
 import { bocDe, dinhDangDiem, type CauNganHang } from '../src/services/bocDe.js';
 import { dienMau, kiemTraMau } from '../src/services/mauWord.js';
 import { phanTichVanBan } from '../src/services/phanTichCauHoi.js';
@@ -357,43 +357,41 @@ describe('API đề thi', () => {
 });
 
 describe('AI soạn câu hỏi', () => {
-  it('chưa có key thì báo hướng dẫn, key không lộ qua /cai-dat', async () => {
+  const ketQuaGia = {
+    cau_hoi: [
+      { chu_de: 'CSS', muc_do: 'tb' as const, diem: 3, noi_dung: ' Trình bày CSS ', dap_an: '- Ý (3 điểm)' },
+      { chu_de: '', muc_do: 'kho' as const, diem: 0, noi_dung: 'So sánh', dap_an: '- Ý (4 điểm)' },
+    ],
+  };
+
+  it('mặc định dùng Gemini; chưa có key thì báo hướng dẫn', async () => {
     const mon = await taoMonCoCauHoi(0);
-    const r = await api()
-      .post(`/api/mon/${mon.id}/ai-soan`)
-      .send({ so_cau: 3, diem: [3, 3, 4] })
-      .expect(400);
-    expect(r.body.loi).toContain('API key');
-    expect((await api().get('/api/ai').expect(200)).body).toMatchObject({ co_khoa: false, mo_hinh: 'claude-opus-5-5' });
+    const r = await api().post(`/api/mon/${mon.id}/ai-soan`).send({ so_cau: 3, diem: [3, 3, 4] }).expect(400);
+    expect(r.body.loi).toContain('API key của Gemini');
+    const tt = (await api().get('/api/ai').expect(200)).body;
+    expect(tt).toMatchObject({ dang_dung: 'gemini', co_khoa: false, mo_hinh: 'gemini-3.8-flash' });
+    expect(tt.nha_cung_cap.map((n: { ma: string }) => n.ma)).toEqual(['gemini', 'claude']);
   });
 
-  it('gửi đúng yêu cầu và trả bản nháp câu hỏi (client giả)', async () => {
-    let yeuCau: Record<string, unknown> | undefined;
-    datTaoClient(
-      () =>
-        ({
-          beta: {
-            messages: {
-              create: async () => ({ content: [] }),
-              parse: async (p: Record<string, unknown>) => {
-                yeuCau = p;
-                return {
-                  stop_reason: 'end_turn',
-                  parsed_output: {
-                    cau_hoi: [
-                      { chu_de: 'CSS', muc_do: 'tb', diem: 3, noi_dung: ' Trình bày CSS ', dap_an: '- Ý (3 điểm)' },
-                      { chu_de: '', muc_do: 'kho', diem: 0, noi_dung: 'So sánh', dap_an: '- Ý (4 điểm)' },
-                    ],
-                  },
-                };
-              },
-            },
-          },
-        }) as never,
-    );
+  it('Gemini: lưu key sau khi gọi thử, gửi đúng yêu cầu, key không lộ', async () => {
+    let daGui: { heThong: string; noiDung: string; khoa: string } | undefined;
+    datNhaCungCap('gemini', {
+      kiemTra: async (k) => {
+        if (k === 'sai') throw new Error('API key not valid');
+      },
+      soan: async (khoa, heThong, noiDung) => {
+        daGui = { khoa, heThong, noiDung };
+        return ketQuaGia;
+      },
+    });
     const mon = await taoMonCoCauHoi(1);
-    await api().put('/api/ai').send({ khoa: 'sk-ant-api03-thu-nghiem-1234' }).expect(200);
-    expect((await api().get('/api/ai')).body).toMatchObject({ co_khoa: true, khoa_an: 'sk-ant-…1234' });
+    // Key sai: không lưu
+    await api().put('/api/ai').send({ nha_cung_cap: 'gemini', khoa: 'sai' }).expect(500);
+    expect((await api().get('/api/ai')).body.co_khoa).toBe(false);
+
+    const tt = (await api().put('/api/ai').send({ nha_cung_cap: 'gemini', khoa: 'AQ.thu-nghiem-gemini-9876' }).expect(200)).body;
+    expect(tt).toMatchObject({ dang_dung: 'gemini', co_khoa: true });
+    expect(tt.nha_cung_cap[0].khoa_an).toBe('AQ.th…9876');
     expect(JSON.stringify((await api().get('/api/cai-dat')).body)).not.toContain('thu-nghiem');
 
     const r = await api()
@@ -404,11 +402,26 @@ describe('AI soạn câu hỏi', () => {
       { chu_de: 'CSS', muc_do: 'tb', diem: 3, noi_dung: 'Trình bày CSS', dap_an: '- Ý (3 điểm)' },
       { chu_de: 'CSS', muc_do: 'kho', diem: 3, noi_dung: 'So sánh', dap_an: '- Ý (4 điểm)' },
     ]);
-    expect(yeuCau).toMatchObject({ model: 'claude-opus-5-5', fallbacks: 'default' });
-    const noiDungGui = JSON.stringify(yeuCau!.messages);
-    expect(noiDungGui).toContain('Thiết kế Web');
-    expect(noiDungGui).toContain('CSS');
-    expect(noiDungGui).toContain('có câu so sánh');
-    expect(noiDungGui).toContain('Nội dung câu 1'); // gửi câu đã có để tránh trùng
+    expect(daGui!.khoa).toBe('AQ.thu-nghiem-gemini-9876');
+    expect(daGui!.heThong).toContain('TỰ LUẬN');
+    expect(daGui!.noiDung).toContain('Thiết kế Web');
+    expect(daGui!.noiDung).toContain('có câu so sánh');
+    expect(daGui!.noiDung).toContain('Nội dung câu 1'); // gửi câu đã có để tránh trùng
+
+    // Xóa key
+    expect((await api().put('/api/ai').send({ nha_cung_cap: 'gemini', khoa: null }).expect(200)).body.co_khoa).toBe(false);
+  });
+
+  it('chuyển sang Claude: dùng key riêng của Claude', async () => {
+    let goi = 0;
+    datNhaCungCap('claude', { kiemTra: async () => {}, soan: async () => (goi++, ketQuaGia) });
+    const mon = await taoMonCoCauHoi(0);
+    let tt = (await api().put('/api/ai').send({ nha_cung_cap: 'claude' }).expect(200)).body;
+    expect(tt).toMatchObject({ dang_dung: 'claude', co_khoa: false, mo_hinh: 'claude-opus-5-5' });
+    expect((await api().post(`/api/mon/${mon.id}/ai-soan`).send({ so_cau: 2, diem: [3] }).expect(400)).body.loi).toContain('Claude');
+    tt = (await api().put('/api/ai').send({ nha_cung_cap: 'claude', khoa: 'sk-ant-thu-1234' }).expect(200)).body;
+    expect(tt.co_khoa).toBe(true);
+    await api().post(`/api/mon/${mon.id}/ai-soan`).send({ so_cau: 2, diem: [3] }).expect(200);
+    expect(goi).toBe(1);
   });
 });

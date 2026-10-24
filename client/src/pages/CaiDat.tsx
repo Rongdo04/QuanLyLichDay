@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, khoa } from '../api';
-import type { CaiDat, NgayNghi } from '../api/types';
+import type { CaiDat, MaNhaCungCap, NgayNghi } from '../api/types';
 import { BaoLoiTai, DangTai, TieuDeTrang } from '../components/ChungUI';
 import { dinhDangDungLuong, dinhDangNgay } from '../lib/format';
 import { thongBao } from '../lib/thongBao';
@@ -248,71 +248,113 @@ function SaoLuu() {
   );
 }
 
-// API key của Claude để AI soạn câu hỏi (lưu trên máy này, không hiện lại đầy đủ)
+// AI soạn câu hỏi: chọn Gemini (miễn phí) hoặc Claude, mỗi bên một API key (lưu trên máy này, không hiện lại đầy đủ)
+const HUONG_DAN_KEY: Record<MaNhaCungCap, { url: string; chu: string }> = {
+  gemini: { url: 'https://aistudio.google.com/apikey', chu: 'Lấy key miễn phí tại Google AI Studio (aistudio.google.com/apikey), đăng nhập bằng tài khoản Google.' },
+  claude: { url: 'https://console.anthropic.com/settings/keys', chu: 'Tạo key tại console.anthropic.com (trả phí theo lượt dùng).' },
+};
+
 function KhoaAi() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: khoa.ai, queryFn: api.ai.lay });
-  const [moi, setMoi] = useState('');
+  const [moi, setMoi] = useState<Record<MaNhaCungCap, string>>({ gemini: '', claude: '' });
   const ghi = useMutation({
-    mutationFn: (k: string | null) => api.ai.ghi(k),
-    onSuccess: (d) => {
+    mutationFn: (d: { nha_cung_cap: MaNhaCungCap; khoa?: string | null }) => api.ai.ghi(d),
+    onSuccess: (d, bien) => {
       qc.setQueryData(khoa.ai, d);
-      setMoi('');
-      thongBao(d.co_khoa ? 'Đã lưu API key (đã gọi thử thành công)' : 'Đã xóa API key');
+      setMoi({ gemini: '', claude: '' });
+      const ten = d.nha_cung_cap.find((n) => n.ma === bien.nha_cung_cap)?.ten;
+      thongBao(
+        bien.khoa ? `Đã lưu API key ${ten} (đã gọi thử thành công)` : bien.khoa === null ? `Đã xóa API key ${ten}` : `Đã chuyển sang dùng ${ten}`,
+      );
     },
   });
+  if (!data) return null;
   return (
     <div className="the mt-4" id="ai">
       <div className="the-dau">
         <div>
           <h2 className="font-medium">AI soạn câu hỏi</h2>
-          <p className="text-xs text-slate-500">
-            Dùng Claude ({data?.mo_hinh ?? '…'}) để soạn câu hỏi tự luận kèm đáp án cho ngân hàng đề thi. Cần có Internet.
-          </p>
+          <p className="text-xs text-slate-500">Soạn câu hỏi tự luận kèm đáp án cho ngân hàng đề thi. Cần có Internet.</p>
         </div>
-        {data && (
-          <span className={`text-sm ${data.co_khoa ? 'text-emerald-700' : 'text-slate-500'}`}>
-            {data.co_khoa ? `Đã có key ${data.khoa_an}${data.nguon === 'moi_truong' ? ' (biến môi trường)' : ''}` : 'Chưa có key'}
-          </span>
-        )}
+        <span className={`text-sm ${data.co_khoa ? 'text-emerald-700' : 'text-amber-700'}`}>
+          Đang dùng: {data.ten}
+          {data.co_khoa ? '' : ' (chưa có key)'}
+        </span>
       </div>
-      <form
-        className="flex flex-wrap items-end gap-2 p-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (moi.trim()) ghi.mutate(moi.trim());
-        }}
-      >
-        <div className="min-w-72 flex-1">
-          <label className="nhan" htmlFor="khoa-ai">
-            API key mới
-          </label>
-          <input
-            id="khoa-ai"
-            type="password"
-            autoComplete="off"
-            className="o-nhap font-mono"
-            placeholder="sk-ant-…"
-            value={moi}
-            onChange={(e) => setMoi(e.target.value)}
-          />
-        </div>
-        <button className="btn-chinh" disabled={!moi.trim() || ghi.isPending}>
-          {ghi.isPending ? 'Đang kiểm tra…' : 'Lưu và kiểm tra'}
-        </button>
-        {data?.nguon === 'cai_dat' && (
-          <button type="button" className="btn-nguy" disabled={ghi.isPending} onClick={() => confirm('Xóa API key?') && ghi.mutate(null)}>
-            Xóa key
-          </button>
-        )}
-        <p className="w-full text-xs text-slate-500">
-          Tạo key tại{' '}
-          <a className="lien-ket" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
-            console.anthropic.com
-          </a>{' '}
-          (trả phí theo lượt dùng). Key chỉ lưu trong file dữ liệu trên máy này.
+      <div className="grid gap-3 p-4 md:grid-cols-2">
+        {data.nha_cung_cap.map((n) => {
+          const dangDung = data.dang_dung === n.ma;
+          return (
+            <form
+              key={n.ma}
+              className={`space-y-2 rounded-lg border p-3 ${dangDung ? 'border-blue-300 bg-blue-50/40' : 'border-slate-200'}`}
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (moi[n.ma].trim()) ghi.mutate({ nha_cung_cap: n.ma, khoa: moi[n.ma].trim() });
+              }}
+            >
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="nha-cung-cap"
+                  checked={dangDung}
+                  disabled={ghi.isPending}
+                  onChange={() => ghi.mutate({ nha_cung_cap: n.ma })}
+                />
+                <span className="font-medium">{n.ten}</span>
+                <span className={`rounded px-1.5 py-0.5 text-xs ${n.mien_phi ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                  {n.mien_phi ? 'Miễn phí' : 'Trả phí'}
+                </span>
+              </label>
+              <div className="text-xs text-slate-500">
+                Mô hình {n.mo_hinh} ·{' '}
+                {n.co_khoa ? (
+                  <span className="text-emerald-700">
+                    đã có key {n.khoa_an}
+                    {n.nguon === 'moi_truong' ? ' (biến môi trường)' : ''}
+                  </span>
+                ) : (
+                  'chưa có key'
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  autoComplete="off"
+                  aria-label={`API key ${n.ten}`}
+                  className="o-nhap font-mono"
+                  placeholder={n.co_khoa ? 'Nhập key mới để thay' : 'Dán API key vào đây'}
+                  value={moi[n.ma]}
+                  onChange={(e) => setMoi({ ...moi, [n.ma]: e.target.value })}
+                />
+                <button className="btn-chinh" disabled={!moi[n.ma].trim() || ghi.isPending}>
+                  {ghi.isPending && ghi.variables?.nha_cung_cap === n.ma && ghi.variables.khoa ? 'Đang kiểm tra…' : 'Lưu'}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">
+                <a className="lien-ket" href={HUONG_DAN_KEY[n.ma].url} target="_blank" rel="noreferrer">
+                  {HUONG_DAN_KEY[n.ma].chu}
+                </a>
+              </p>
+              {n.nguon === 'cai_dat' && (
+                <button
+                  type="button"
+                  className="text-xs text-slate-400 hover:text-red-600"
+                  disabled={ghi.isPending}
+                  onClick={() => confirm(`Xóa API key ${n.ten}?`) && ghi.mutate({ nha_cung_cap: n.ma, khoa: null })}
+                >
+                  Xóa key
+                </button>
+              )}
+            </form>
+          );
+        })}
+        <p className="text-xs text-slate-500 md:col-span-2">
+          Key chỉ lưu trong file dữ liệu trên máy này (thư mục data/), không đưa lên GitHub. Gói miễn phí của Gemini có giới hạn số lần gọi
+          mỗi phút / mỗi ngày; nếu báo hết lượt thì chờ một lát rồi thử lại.
         </p>
-      </form>
+      </div>
     </div>
   );
 }
