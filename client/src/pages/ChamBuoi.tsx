@@ -8,6 +8,7 @@ import { TrinhSinhLich } from '../components/TrinhSinhLich';
 import { congNgay, dinhDangNgay, dinhDangTien, homNay, NHAN_DU_KIEN } from '../lib/format';
 import { useDsLop, useSuaBuoi, useThemBuoi, useXoaBuoi } from '../lib/hooks';
 import { soBuoiTrongNgay, thuCuaNgay, tienDcNgay } from '../lib/nghiepVu';
+import { coChieu, coSang, duKienCuaBuoi } from '../lib/duKien';
 import { thongBao } from '../lib/thongBao';
 
 const KHOA_LOP_GAN_NHAT = 'cham-buoi:lop';
@@ -208,7 +209,7 @@ function ChamTheoLop({ lopId, dsLop, onChonLop }: { lopId: number; dsLop: LopTho
                 </thead>
                 <tbody>
                   {lop.buoi.map((b) => (
-                    <DongBuoi key={b.id} b={b} tienDcDiaDiem={lop.tien_dc_dia_diem} homNay={hn} />
+                    <DongBuoi key={b.id} b={b} lichLop={lop} tienDcDiaDiem={lop.tien_dc_dia_diem} homNay={hn} />
                   ))}
                 </tbody>
                 <tfoot>
@@ -314,11 +315,13 @@ function DongBuoi({
   tienDcDiaDiem,
   homNay: hn,
   lop,
+  lichLop,
 }: {
   b: Buoi;
   tienDcDiaDiem: number | null;
   homNay: string;
   lop?: BuoiDayDu;
+  lichLop?: { lich_tuan: string | null; lich_phan_cong: string | null };
 }) {
   const sua = useSuaBuoi();
   const xoa = useXoaBuoi();
@@ -326,6 +329,7 @@ function DongBuoi({
   const quaChuaCham = b.ngay < hn && !daDay;
   const dc = tienDcNgay(b, tienDcDiaDiem);
   const nhanNgay = dinhDangNgay(b.ngay);
+  const dk = duKienCuaBuoi(b, lop ?? lichLop);
 
   return (
     <tr className={b.ngay === hn ? 'bg-blue-50/60' : quaChuaCham ? 'bg-amber-50/50' : ''}>
@@ -337,7 +341,7 @@ function DongBuoi({
               {lop.truong_ma} · {lop.hoc_phan}
             </div>
           </td>
-          <td className="text-sm text-slate-600">{b.du_kien ? NHAN_DU_KIEN[b.du_kien] : '—'}</td>
+          <td className="text-sm text-slate-600">{dk ? NHAN_DU_KIEN[dk] : '—'}</td>
         </>
       ) : (
         <>
@@ -351,7 +355,7 @@ function DongBuoi({
       <td className="text-center">
         <OTick
           dau={!!b.sang}
-          duKien={b.du_kien === 'S' || b.du_kien === 'SC'}
+          duKien={coSang(dk)}
           nhan={`Sáng ${nhanNgay}`}
           onBam={() => sua.mutate({ id: b.id, sang: b.sang ? 0 : 1 })}
         />
@@ -359,7 +363,7 @@ function DongBuoi({
       <td className="text-center">
         <OTick
           dau={!!b.chieu}
-          duKien={b.du_kien === 'C' || b.du_kien === 'SC'}
+          duKien={coChieu(dk)}
           nhan={`Chiều ${nhanNgay}`}
           onBam={() => sua.mutate({ id: b.id, chieu: b.chieu ? 0 : 1 })}
         />

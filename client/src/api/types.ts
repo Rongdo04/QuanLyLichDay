@@ -77,6 +77,8 @@ export interface BuoiDayDu extends Buoi {
   don_gia: number;
   truong_id: number;
   truong_ma: string;
+  lich_tuan: string | null;
+  lich_phan_cong: string | null;
   dia_diem_ten: string | null;
   tien_dc_dia_diem: number | null;
 }

@@ -8,6 +8,7 @@ import { BaoLoiTai, DangTai, TheSoLieu, ThanhTienDo, TieuDeTrang, TrongRong } fr
 import { congNgay, cuoiThang, dauThang, dauTuan, dinhDangNgay, dinhDangSo, dinhDangTien, homNay, ngayNgan } from '../lib/format';
 import { useDsLop, useDsTruong } from '../lib/hooks';
 import { thuCuaNgay } from '../lib/nghiepVu';
+import { coChieu, coSang, duKienCuaBuoi } from '../lib/duKien';
 import { thongBao } from '../lib/thongBao';
 
 export function TrangTongQuan() {
@@ -263,7 +264,7 @@ function LichTuan() {
         <h2 className="font-medium">Lịch tuần này / tuần tới</h2>
         <span className="flex items-center gap-2 text-xs text-slate-500">
           <span className="inline-block h-3 w-3 rounded-sm bg-blue-600" /> đã dạy
-          <span className="inline-block h-3 w-3 rounded-sm border border-dashed border-blue-400" /> dự kiến
+          <span className="inline-block h-3 w-3 rounded-sm border border-dashed border-blue-500 bg-blue-50" /> dự kiến
         </span>
       </div>
       {isLoading ? <DangTai /> : <div className="grid gap-4 p-4 md:grid-cols-2">{[tuan(dau, 'Tuần này'), tuan(congNgay(dau, 7), 'Tuần tới')]}</div>}
@@ -276,16 +277,17 @@ function Buoi2({ b }: { b: BuoiDayDu }) {
   const o = (chu: string, daDay: boolean, duKien: boolean) => (
     <span
       className={`inline-flex h-5 w-5 items-center justify-center rounded-sm text-[10px] font-semibold ${
-        daDay ? 'bg-blue-600 text-white' : duKien ? 'border border-dashed border-blue-400 text-blue-500' : 'border border-slate-200 text-slate-300'
+        daDay ? 'bg-blue-600 text-white' : duKien ? 'border border-dashed border-blue-500 bg-blue-50 text-blue-600' : 'border border-slate-200 text-slate-300'
       }`}
     >
       {chu}
     </span>
   );
+  const dk = duKienCuaBuoi(b, b);
   return (
     <span className="flex shrink-0 gap-0.5" aria-hidden>
-      {o('S', !!b.sang, b.du_kien === 'S' || b.du_kien === 'SC')}
-      {o('C', !!b.chieu, b.du_kien === 'C' || b.du_kien === 'SC')}
+      {o('S', !!b.sang, coSang(dk))}
+      {o('C', !!b.chieu, coChieu(dk))}
     </span>
   );
 }
