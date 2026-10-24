@@ -10,6 +10,7 @@ const schemaCaiDat = z
     gio_sang: z.string().trim().max(20),
     gio_chieu: z.string().trim().max(20),
     nam_hoc: z.string().trim().regex(/^\d{4}-\d{4}$/, 'Năm học phải có dạng 2026-2027'),
+    tiet_moi_buoi: z.number().int().min(1).max(20),
     ngay_nghi: z.array(
       z
         .object({

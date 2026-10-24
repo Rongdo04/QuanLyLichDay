@@ -16,6 +16,8 @@ const NHAN: Record<string, string> = {
   ma_lop: 'Mã lớp',
   lop_van_hoa: 'Lớp văn hóa',
   hoc_phan: 'Học phần',
+  so_tiet: 'Số tiết',
+  tiet_moi_buoi: 'Số tiết một buổi',
   so_buoi_ke_hoach: 'Số buổi kế hoạch',
   don_gia: 'Đơn giá',
   lich_phan_cong: 'Lịch phân công',

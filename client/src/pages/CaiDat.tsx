@@ -71,6 +71,18 @@ export function TrangCaiDat() {
                 onChange={(e) => doi('nam_hoc', e.target.value)}
               />
             </O>
+            <O nhan="Số tiết một buổi" id="tiet-moi-buoi">
+              <input
+                id="tiet-moi-buoi"
+                type="number"
+                min={1}
+                max={20}
+                required
+                className="o-nhap"
+                value={form.tiet_moi_buoi || ''}
+                onChange={(e) => doi('tiet_moi_buoi', Number(e.target.value))}
+              />
+            </O>
           </div>
           <p className="px-4 pb-4 text-xs text-slate-500">
             Dòng cuối khối thông tin trong file Excel: Giáo viên: :{form.ma_gv} {form.ten_gv}: {form.sdt}

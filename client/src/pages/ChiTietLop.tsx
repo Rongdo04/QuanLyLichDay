@@ -19,6 +19,7 @@ interface FormLop {
   ma_lop: string;
   lop_van_hoa: string;
   hoc_phan: string;
+  so_tiet: string;
   so_buoi_ke_hoach: string;
   don_gia: string;
   lich_phan_cong: string;
@@ -35,6 +36,7 @@ const formRong = (truongId = ''): FormLop => ({
   ma_lop: '',
   lop_van_hoa: '',
   hoc_phan: '',
+  so_tiet: '',
   so_buoi_ke_hoach: '',
   don_gia: '',
   lich_phan_cong: '',
@@ -51,6 +53,7 @@ const tuLop = (l: Lop): FormLop => ({
   ma_lop: l.ma_lop ?? '',
   lop_van_hoa: l.lop_van_hoa ?? '',
   hoc_phan: l.hoc_phan,
+  so_tiet: l.so_tiet ? String(l.so_tiet) : '',
   so_buoi_ke_hoach: l.so_buoi_ke_hoach ? String(l.so_buoi_ke_hoach) : '',
   don_gia: String(l.don_gia),
   lich_phan_cong: l.lich_phan_cong ?? '',
@@ -70,6 +73,7 @@ function sangDuLieu(f: FormLop): DuLieuLop {
     ma_lop: chuoiHoacNull(f.ma_lop),
     lop_van_hoa: chuoiHoacNull(f.lop_van_hoa),
     hoc_phan: f.hoc_phan.trim(),
+    so_tiet: f.so_tiet ? Number(f.so_tiet) : null,
     so_buoi_ke_hoach: f.so_buoi_ke_hoach ? Number(f.so_buoi_ke_hoach) : null,
     don_gia: Number(f.don_gia),
     lich_phan_cong: chuoiHoacNull(f.lich_phan_cong),
@@ -190,9 +194,12 @@ function ChiTietLop({ id }: { id: number | null }) {
   if (!laMoi && (error || !lop)) return <BaoLoiTai loi={error ?? new Error('Không tìm thấy lớp')} />;
   if (!form) return <DangTai />;
 
+  const tietMoiBuoi = caiDat?.tiet_moi_buoi || 5;
   const doi = (k: keyof FormLop, v: string) => {
     daSua.current.add(k);
     const moi = { ...form, [k]: v };
+    // Nhập số tiết thì tự quy ra số buổi kế hoạch (làm tròn lên), vẫn sửa tay được
+    if (k === 'so_tiet' && Number(v) > 0) moi.so_buoi_ke_hoach = String(Math.ceil(Number(v) / tietMoiBuoi));
     // Lớp mới: chọn trường thì gợi ý đơn giá, địa điểm theo lớp gần nhất của trường đó
     if (laMoi && k === 'truong_id' && v) {
       const ganNhat = dsLop?.filter((l) => l.truong_id === Number(v)).at(-1);
@@ -305,6 +312,25 @@ function ChiTietLop({ id }: { id: number | null }) {
                 placeholder="VD: 11A6"
                 value={form.lop_van_hoa}
                 onChange={(e) => doi('lop_van_hoa', e.target.value)}
+              />
+            </O>
+            <O
+              nhan="Số tiết"
+              id="so-tiet"
+              goiY={
+                Number(form.so_tiet) > 0
+                  ? `≈ ${Math.ceil(Number(form.so_tiet) / tietMoiBuoi)} buổi (${tietMoiBuoi} tiết / buổi)`
+                  : `${tietMoiBuoi} tiết / buổi (đổi trong Cài đặt)`
+              }
+            >
+              <input
+                id="so-tiet"
+                type="number"
+                min={1}
+                className="o-nhap"
+                placeholder="VD: 45"
+                value={form.so_tiet}
+                onChange={(e) => doi('so_tiet', e.target.value)}
               />
             </O>
             <O nhan="Số buổi kế hoạch" id="so-buoi" goiY="1 buổi = 1 ô sáng hoặc chiều">

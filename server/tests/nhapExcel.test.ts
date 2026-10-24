@@ -43,6 +43,7 @@ function xacNhanTuPhanTich(kq: KetQuaPhanTich, truongId: number, xuLy: 'bo_qua' 
       hoc_phan: s.hoc_phan,
       ma_lop: s.ma_lop,
       lop_van_hoa: s.lop_van_hoa,
+      so_tiet: s.so_tiet,
       so_buoi_ke_hoach: s.so_buoi_ke_hoach,
       don_gia: s.don_gia!,
       lich_phan_cong: s.lich_phan_cong,

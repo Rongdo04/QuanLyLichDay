@@ -8,6 +8,7 @@ export interface CaiDat {
   gio_sang: string;
   gio_chieu: string;
   nam_hoc: string;
+  tiet_moi_buoi: number; // số tiết của một buổi (một ô sáng hoặc chiều)
   ngay_nghi: NgayNghi[];
   thu_muc_sao_luu: string;
 }
@@ -19,12 +20,13 @@ const MAC_DINH: CaiDat = {
   gio_sang: '07h30',
   gio_chieu: '13h30',
   nam_hoc: '',
+  tiet_moi_buoi: 5,
   ngay_nghi: [],
   thu_muc_sao_luu: '',
 };
 
 // Các khóa lưu dạng JSON
-const KHOA_JSON = new Set(['ngay_nghi']);
+const KHOA_JSON = new Set(['ngay_nghi', 'tiet_moi_buoi']);
 
 export function layCaiDat(): CaiDat {
   const rows = layDb().prepare('SELECT khoa, gia_tri FROM cai_dat').all() as { khoa: string; gia_tri: string }[];
@@ -36,7 +38,7 @@ export function layCaiDat(): CaiDat {
       try {
         kq[r.khoa] = JSON.parse(r.gia_tri);
       } catch {
-        kq[r.khoa] = [];
+        kq[r.khoa] = MAC_DINH[r.khoa as keyof CaiDat];
       }
     } else kq[r.khoa] = r.gia_tri;
   }

@@ -24,6 +24,7 @@ const schemaLop = z.object({
   ma_lop: zChuoiTuyChon,
   lop_van_hoa: zChuoiTuyChon,
   hoc_phan: z.string().trim().min(1).max(200),
+  so_tiet: z.number().int().min(1).max(2000).nullish().transform((v) => v ?? null),
   so_buoi_ke_hoach: z.number().int().min(1).nullish().transform((v) => v ?? null),
   don_gia: z.number().int().min(0),
   lich_phan_cong: zChuoiTuyChon,

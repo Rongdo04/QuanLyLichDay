@@ -40,6 +40,7 @@ export interface Lop {
   ma_lop: string | null;
   lop_van_hoa: string | null;
   hoc_phan: string;
+  so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
   lich_phan_cong: string | null;
@@ -92,6 +93,7 @@ export interface DuLieuLop {
   ma_lop: string | null;
   lop_van_hoa: string | null;
   hoc_phan: string;
+  so_tiet?: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
   lich_phan_cong: string | null;
@@ -118,6 +120,7 @@ export interface CaiDat {
   gio_sang: string;
   gio_chieu: string;
   nam_hoc: string;
+  tiet_moi_buoi: number;
   ngay_nghi: NgayNghi[];
   thu_muc_sao_luu: string;
 }
@@ -192,6 +195,7 @@ export interface SheetNhap {
   hoc_phan: string;
   ma_lop: string | null;
   lop_van_hoa: string | null;
+  so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number | null;
   lich_phan_cong: string | null;

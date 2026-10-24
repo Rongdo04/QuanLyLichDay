@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import ExcelJS from 'exceljs';
 import { layDb } from '../db/connection.js';
 import { chenBuoiNhap, xoaBuoiCuaLop } from '../repositories/buoi.js';
+import { layCaiDat } from '../repositories/caiDat.js';
 import { dsDiaDiem, taoDiaDiem, timDiaDiemTheoTen } from '../repositories/diaDiem.js';
 import { suaLop, taoLop, tenSheetMoi, timLopTheoTenSheet } from '../repositories/lop.js';
 import { dsTruong, layTruong } from '../repositories/truong.js';
@@ -24,6 +25,7 @@ export interface SheetNhap {
   hoc_phan: string;
   ma_lop: string | null;
   lop_van_hoa: string | null;
+  so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number | null;
   lich_phan_cong: string | null;
@@ -135,7 +137,8 @@ export function timTruongTheoGoiY(goiY: string | null): number | null {
 const RE_LOP = /^Lớp\s*:\s*(.*)$/iu;
 const RE_VAN_HOA = /\(\s*Lớp\s+văn\s+h(?:óa|oá)\s*:\s*([^)]*)\)/iu;
 const RE_HOC_PHAN = /^Học\s+phần\s*:\s*(.*)$/iu;
-const RE_SO_BUOI = /\(\s*(\d+)\s*buổi\s*\)\s*$/iu;
+// Kế hoạch ở cuối dòng học phần: "(15 buổi)", "(45 tiết)", "(45 tiết, 9 buổi)"
+const RE_KE_HOACH = /\(\s*(?:(\d+)\s*tiết)?\s*[,;\-–]?\s*(?:(\d+)\s*buổi)?\s*\)\s*$/iu;
 const RE_DIA_DIEM = /^Địa\s+điểm\s*:\s*(.*)$/iu;
 const RE_LICH = /^Lịch\s+phân\s+công\s*:\s*(.*)$/iu;
 const RE_DONE = /\(\s*done\s*\)/iu; // không dùng cờ g: .test() với cờ g giữ lastIndex giữa các lần gọi
@@ -198,6 +201,7 @@ export function phanTichSheet(ws: ExcelJS.Worksheet): SheetNhap | { loi: string 
   let maLop: string | null = null;
   let lopVanHoa: string | null = null;
   let hocPhan: string | null = null;
+  let soTiet: number | null = null;
   let soBuoiKeHoach: number | null = null;
   let tenDayDu: string | null = null;
   let lichPhanCong: string | null = null;
@@ -206,9 +210,12 @@ export function phanTichSheet(ws: ExcelJS.Worksheet): SheetNhap | { loi: string 
     if ((m = RE_DIA_DIEM.exec(t))) tenDayDu = m[1].trim() || null;
     else if ((m = RE_LICH.exec(t))) lichPhanCong = m[1].trim() || null;
     else if ((m = RE_HOC_PHAN.exec(t))) {
-      const sb = RE_SO_BUOI.exec(m[1]);
-      soBuoiKeHoach = sb ? Number(sb[1]) : null;
-      hocPhan = m[1].replace(RE_SO_BUOI, '').trim() || null;
+      const kh = RE_KE_HOACH.exec(m[1]);
+      if (kh && (kh[1] || kh[2])) {
+        soTiet = kh[1] ? Number(kh[1]) : null;
+        soBuoiKeHoach = kh[2] ? Number(kh[2]) : soTiet ? Math.ceil(soTiet / layCaiDat().tiet_moi_buoi) : null;
+        hocPhan = m[1].slice(0, kh.index).trim() || null;
+      } else hocPhan = m[1].trim() || null;
     } else if ((m = RE_LOP.exec(t))) {
       const vh = RE_VAN_HOA.exec(m[1]);
       lopVanHoa = vh ? vh[1].trim() || null : null;
@@ -252,6 +259,7 @@ export function phanTichSheet(ws: ExcelJS.Worksheet): SheetNhap | { loi: string 
     hoc_phan: hocPhan ?? tenSheet,
     ma_lop: maLop,
     lop_van_hoa: lopVanHoa,
+    so_tiet: soTiet,
     so_buoi_ke_hoach: soBuoiKeHoach,
     don_gia: donGia,
     lich_phan_cong: lichPhanCong,
@@ -300,6 +308,7 @@ export interface SheetXacNhan {
   hoc_phan: string;
   ma_lop: string | null;
   lop_van_hoa: string | null;
+  so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
   lich_phan_cong: string | null;
@@ -357,6 +366,7 @@ export function xacNhanNhap(d: DuLieuXacNhan) {
         ma_lop: s.ma_lop,
         lop_van_hoa: s.lop_van_hoa,
         hoc_phan: s.hoc_phan,
+        so_tiet: s.so_tiet,
         so_buoi_ke_hoach: s.so_buoi_ke_hoach,
         don_gia: s.don_gia,
         lich_phan_cong: s.lich_phan_cong,

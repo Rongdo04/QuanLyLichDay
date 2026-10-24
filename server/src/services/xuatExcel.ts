@@ -58,7 +58,8 @@ export function khoiThongTin(lop: LopDayDu, caiDat: CaiDat): string[] {
     const phan = [lop.ma_lop, lop.lop_van_hoa ? `(Lớp văn hóa: ${lop.lop_van_hoa})` : null].filter(Boolean);
     dong.push(`Lớp: ${phan.join(' ')}`);
   }
-  dong.push(`Học phần: ${lop.hoc_phan}${lop.so_buoi_ke_hoach ? ` (${lop.so_buoi_ke_hoach} buổi)` : ''}`);
+  const keHoach = [lop.so_tiet && `${lop.so_tiet} tiết`, lop.so_buoi_ke_hoach && `${lop.so_buoi_ke_hoach} buổi`].filter(Boolean);
+  dong.push(`Học phần: ${lop.hoc_phan}${keHoach.length ? ` (${keHoach.join(', ')})` : ''}`);
   if (lop.lich_phan_cong) dong.push(`Lịch phân công: ${lop.lich_phan_cong}`);
   dong.push(`Thời gian vào lớp: Sáng: ${caiDat.gio_sang} - Chiều: ${caiDat.gio_chieu}`);
   dong.push(`Giáo viên: :${caiDat.ma_gv} ${caiDat.ten_gv}: ${caiDat.sdt}`);

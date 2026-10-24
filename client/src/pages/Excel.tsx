@@ -276,6 +276,7 @@ function NhapExcel() {
           hoc_phan: d.hoc_phan.trim(),
           ma_lop: d.goc.ma_lop,
           lop_van_hoa: d.goc.lop_van_hoa,
+          so_tiet: d.goc.so_tiet,
           so_buoi_ke_hoach: d.goc.so_buoi_ke_hoach,
           don_gia: Number(d.don_gia),
           lich_phan_cong: d.goc.lich_phan_cong,
@@ -481,6 +482,7 @@ function NhapExcel() {
                             {[
                               d.goc.ma_lop && `Lớp ${d.goc.ma_lop}`,
                               d.goc.lop_van_hoa && `văn hóa ${d.goc.lop_van_hoa}`,
+                              d.goc.so_tiet && `${d.goc.so_tiet} tiết`,
                               d.goc.so_buoi_ke_hoach && `${d.goc.so_buoi_ke_hoach} buổi KH`,
                             ]
                               .filter(Boolean)

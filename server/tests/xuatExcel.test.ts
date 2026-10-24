@@ -8,7 +8,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { taoApp } from '../src/app.js';
 import { datDb, moDb } from '../src/db/connection.js';
 import { taoBuoi } from '../src/repositories/buoi.js';
-import { taoLop } from '../src/repositories/lop.js';
+import { suaLop, taoLop } from '../src/repositories/lop.js';
+import { ghiCaiDat } from '../src/repositories/caiDat.js';
+import { phanTichFile } from '../src/services/nhapExcel.js';
 import { tenFileTruong, xuatFileTruong } from '../src/services/xuatExcel.js';
 import { xuatTongHop } from '../src/services/xuatTongHop.js';
 
@@ -136,7 +138,6 @@ describe('xuatExcel', () => {
 
   it('có lịch phân công thì thêm dòng, lọc theo khoảng ngày', async () => {
     const lop = taoLopAutoCad();
-    const { suaLop } = await import('../src/repositories/lop.js');
     suaLop(lop.id, { lich_phan_cong: 'Chiều T4 và ngày T7' });
     const { buffer } = await xuatFileTruong(4, { tu: '2026-10-01', den: '2026-10-31' });
     const ws = (await docLai(buffer)).getWorksheet('AutoCad_TT')!;
@@ -164,6 +165,37 @@ describe('xuatExcel', () => {
     // File có <v>0</v>, nhưng bộ đọc của exceljs bỏ qua kết quả bằng 0 nên result = undefined
     expect((ws.getCell('H5').value as ExcelJS.CellFormulaValue).result ?? 0).toBe(0);
     expect(ws.getCell('K4').value).toBe('Học phần: Tin học');
+  });
+
+  it('ghi số tiết vào dòng học phần, nhập lại đọc được số tiết', async () => {
+    const lop = taoLopAutoCad();
+    suaLop(lop.id, { so_tiet: 75 });
+    taoLop({
+      truong_id: 4,
+      dia_diem_id: null,
+      ten_sheet: 'Tin hoc',
+      ma_lop: null,
+      lop_van_hoa: null,
+      hoc_phan: 'Tin học',
+      so_tiet: 45,
+      so_buoi_ke_hoach: null,
+      don_gia: 300,
+      lich_phan_cong: null,
+      ngay_bat_dau: null,
+      ngay_ket_thuc: null,
+      trang_thai: 'dang_day',
+    });
+    const { buffer } = await xuatFileTruong(4);
+    const wb = await docLai(buffer);
+    expect(wb.getWorksheet('AutoCad_TT')!.getCell('K6').value).toBe('Học phần: Vẽ kỹ thuật và Autocad (75 tiết, 15 buổi)');
+    expect(wb.getWorksheet('Tin hoc')!.getCell('K4').value).toBe('Học phần: Tin học (45 tiết)');
+
+    // Nhập lại: chỉ có số tiết thì quy ra số buổi theo cài đặt (4 tiết / buổi → 12 buổi)
+    ghiCaiDat({ tiet_moi_buoi: 4 });
+    const kq = await phanTichFile(buffer, 'x.xlsx');
+    const [autoCad, tinHoc] = kq.sheets as { hoc_phan: string; so_tiet: number | null; so_buoi_ke_hoach: number | null }[];
+    expect(autoCad).toMatchObject({ hoc_phan: 'Vẽ kỹ thuật và Autocad', so_tiet: 75, so_buoi_ke_hoach: 15 });
+    expect(tinHoc).toMatchObject({ hoc_phan: 'Tin học', so_tiet: 45, so_buoi_ke_hoach: 12 });
   });
 
   it('tên file khi có khoảng ngày', () => {
