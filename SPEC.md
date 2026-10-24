@@ -8,7 +8,7 @@
 
 ## 1. Bối cảnh
 
-- **Người dùng duy nhất:** giáo viên **Đặng Mạnh Hiền**, mã GV **G366**, SĐT **0329615098**.
+- **Người dùng duy nhất:** một giáo viên. Họ tên, mã GV và số điện thoại nhập trong trang Cài đặt.
 - Thầy dạy thỉnh giảng tại nhiều trường trung cấp (TC GTCT, TC GTVT, TC Đa Ngành, TC Hà Nội…). Mỗi trường có nhiều lớp/học phần.
 - Hiện tại thầy theo dõi bằng nhiều file Excel, mỗi trường một file và mỗi lớp một sheet. Thầy đánh dấu `x` vào cột Sáng/Chiều cho mỗi buổi dạy, rồi tính tiền bằng công thức.
 - **Mục tiêu:**
@@ -75,7 +75,7 @@ CREATE TABLE cai_dat (               -- thông tin giáo viên & cấu hình (ke
   khoa   TEXT PRIMARY KEY,
   gia_tri TEXT NOT NULL
 );
--- seed: ten_gv='Đặng Mạnh Hiền', ma_gv='G366', sdt='0329615098',
+-- seed: ten_gv='<họ tên GV>', ma_gv='<mã GV>', sdt='<số điện thoại>',
 --       gio_sang='07h30', gio_chieu='13h30', nam_hoc='2026-2027'
 
 CREATE TABLE truong (
@@ -232,7 +232,7 @@ Tên sheet lấy từ `lop.ten_sheet`, theo thứ tự `thu_tu`. Bố cục chu�
 6   06/10/2026  Thứ 3                                  =SWITCH…                       Học phần: … (N buổi)
 7   …                                                                                 Lịch phân công: …
 8                                                                                     Thời gian vào lớp: …
-9                                                                                     Giáo viên: :G366 Đặng Mạnh Hiền: 0329615098
+9                                                                                     Giáo viên: :<mã GV> <họ tên GV>: <SĐT>
 ```
 
 **Chi tiết từng ô:**
