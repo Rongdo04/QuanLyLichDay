@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, khoa } from '../api';
 import type { DuLieuLop, Lop, TrangThai } from '../api/types';
 import { BaoLoiTai, DangTai, Modal, NhanTrangThai, ThanhTienDo } from '../components/ChungUI';
+import { ChonThuTrongTuan, docLichTuan, lichTuanGui } from '../components/ChonThuTrongTuan';
 import { TrinhSinhLich } from '../components/TrinhSinhLich';
 import { dinhDangNgay, dinhDangTien, NHAN_TRANG_THAI } from '../lib/format';
 import { useDsDiaDiem, useDsLop, useDsTruong } from '../lib/hooks';
+import { phanTichLichPhanCong, sinhLichChiTiet, soBuoiTheoDuKien, type LichTheoThu } from '../lib/nghiepVu';
 import { thongBao } from '../lib/thongBao';
 
 // Form dùng chuỗi cho mọi ô nhập, đổi sang số / null khi lưu
@@ -108,6 +110,10 @@ function ChiTietLop({ id }: { id: number | null }) {
   const [moSinhLich, setMoSinhLich] = useState(params.get('sinh-lich') === '1');
   // Các ô người dùng đã sửa mà chưa lưu
   const daSua = useRef(new Set<keyof FormLop>());
+  // Lịch dạy hằng tuần (thứ + sáng/chiều); lớp cũ chưa có thì đọc từ "Lịch phân công"
+  const [thu, setThu] = useState<LichTheoThu>({});
+  const daSuaThu = useRef(false);
+  const { data: caiDat } = useQuery({ queryKey: khoa.caiDat, queryFn: api.caiDat.lay });
 
   // Dữ liệu lớp thay đổi (vừa lưu, vừa sinh lịch…) → cập nhật các ô chưa sửa, giữ nguyên ô đang sửa
   useEffect(() => {
@@ -117,16 +123,29 @@ function ChiTietLop({ id }: { id: number | null }) {
       if (cu) daSua.current.forEach((k) => Object.assign(moi, { [k]: cu[k] }));
       return moi;
     });
+    if (!daSuaThu.current) {
+      const luu = docLichTuan(lop.lich_tuan);
+      setThu(Object.keys(luu).length ? luu : phanTichLichPhanCong(lop.lich_phan_cong).thu);
+    }
   }, [lop]);
 
   const luu = useMutation({
-    mutationFn: (f: FormLop) => (laMoi ? api.lop.tao(sangDuLieu(f)) : api.lop.sua(id!, sangDuLieu(f))),
+    mutationFn: async (f: FormLop) => {
+      const d = { ...sangDuLieu(f), lich_tuan: lichTuanGui(thu) };
+      return laMoi ? api.lop.tao(d) : { ...(await api.lop.sua(id!, d)), so_ngay_sinh: 0 };
+    },
     onSuccess: (l) => {
       daSua.current.clear();
+      daSuaThu.current = false;
       qc.invalidateQueries();
       if (laMoi) {
-        thongBao(`Đã tạo lớp "${l.ten_sheet}". Tiếp theo: sinh lịch dạy.`);
-        navigate(`/lop/${l.id}?sinh-lich=1`, { replace: true });
+        if (l.so_ngay_sinh > 0) {
+          thongBao(`Đã tạo lớp "${l.ten_sheet}" và ${l.so_ngay_sinh} ngày dạy. Có thể chấm buổi ngay.`);
+          navigate(`/lop/${l.id}`, { replace: true });
+        } else {
+          thongBao(`Đã tạo lớp "${l.ten_sheet}". Tiếp theo: sinh lịch dạy.`);
+          navigate(`/lop/${l.id}?sinh-lich=1`, { replace: true });
+        }
       } else {
         setForm(tuLop(l));
         thongBao('Đã lưu thay đổi');
@@ -150,6 +169,23 @@ function ChiTietLop({ id }: { id: number | null }) {
     },
   });
 
+  // Xem trước số ngày sẽ tự sinh khi tạo lớp (cùng thuật toán với server)
+  const coThu = Object.values(thu).some(Boolean);
+  const xemTruocLich = useMemo(() => {
+    if (!laMoi || !form || !coThu || !form.ngay_bat_dau) return null;
+    const soBuoi = Number(form.so_buoi_ke_hoach) || null;
+    if (!form.ngay_ket_thuc && !soBuoi) return null;
+    if (form.ngay_ket_thuc && form.ngay_ket_thuc < form.ngay_bat_dau) return null;
+    const { ngay, boQua } = sinhLichChiTiet({
+      batDau: form.ngay_bat_dau,
+      ketThuc: form.ngay_ket_thuc || null,
+      soBuoi,
+      thu,
+      ngayNghi: caiDat?.ngay_nghi ?? [],
+    });
+    return { ngay, boQua, soBuoi: ngay.reduce((s, n) => s + soBuoiTheoDuKien(n.du_kien), 0) };
+  }, [laMoi, form, coThu, thu, caiDat]);
+
   if (!laMoi && isLoading) return <DangTai />;
   if (!laMoi && (error || !lop)) return <BaoLoiTai loi={error ?? new Error('Không tìm thấy lớp')} />;
   if (!form) return <DangTai />;
@@ -168,9 +204,24 @@ function ChiTietLop({ id }: { id: number | null }) {
     setForm(moi);
   };
   const loiSheet = loiTenSheet(form.ten_sheet);
+  // Lớp mới có chọn thứ: cần đủ mốc để tự sinh lịch
+  const loiLich =
+    laMoi && coThu
+      ? !form.ngay_bat_dau
+        ? 'Nhập ngày bắt đầu để tự sinh lịch'
+        : !form.ngay_ket_thuc && !form.so_buoi_ke_hoach
+          ? 'Nhập ngày kết thúc hoặc số buổi kế hoạch để biết sinh lịch đến khi nào'
+          : form.ngay_ket_thuc && form.ngay_ket_thuc < form.ngay_bat_dau
+            ? 'Ngày kết thúc phải sau ngày bắt đầu'
+            : null
+      : null;
+  const doiThu = (t: LichTheoThu) => {
+    daSuaThu.current = true;
+    setThu(t);
+  };
   const guiForm = (e: FormEvent) => {
     e.preventDefault();
-    if (!loiSheet) luu.mutate(form);
+    if (!loiSheet && !loiLich) luu.mutate(form);
   };
   const dongSinhLich = () => {
     setMoSinhLich(false);
@@ -282,7 +333,7 @@ function ChiTietLop({ id }: { id: number | null }) {
               />
             </O>
           </div>
-          <O nhan="Lịch phân công" id="lich-phan-cong" goiY="Hiện ở khối thông tin trong file Excel. Trình sinh lịch có thể tự điền.">
+          <O nhan="Lịch phân công" id="lich-phan-cong" goiY="Hiện ở khối thông tin trong file Excel. Để trống thì tự viết theo lịch dạy hằng tuần.">
             <input
               id="lich-phan-cong"
               className="o-nhap"
@@ -323,12 +374,33 @@ function ChiTietLop({ id }: { id: number | null }) {
               <input id="thu-tu" type="number" min={0} className="o-nhap" value={form.thu_tu} onChange={(e) => doi('thu_tu', e.target.value)} />
             </O>
           </div>
+          <div className="rounded-md border border-slate-200 p-3">
+            <div className="nhan">Lịch dạy hằng tuần (thứ và buổi)</div>
+            <ChonThuTrongTuan thu={thu} onDoi={doiThu} goiY="Chưa chọn thứ nào — sẽ phải sinh lịch thủ công sau khi tạo lớp." />
+            {laMoi ? (
+              loiLich ? (
+                <p className="mt-1.5 text-sm text-amber-700">{loiLich}</p>
+              ) : xemTruocLich ? (
+                <p className="mt-1.5 text-sm text-emerald-700">
+                  Khi tạo lớp sẽ tự sinh <b>{xemTruocLich.ngay.length} ngày dạy</b> ({xemTruocLich.soBuoi} buổi dự kiến)
+                  {xemTruocLich.ngay.length > 0 &&
+                    `, từ ${dinhDangNgay(xemTruocLich.ngay[0].ngay)} đến ${dinhDangNgay(xemTruocLich.ngay.at(-1)!.ngay)}`}
+                  {xemTruocLich.boQua.length > 0 && `; bỏ qua ${xemTruocLich.boQua.length} ngày nghỉ lễ`}.
+                  {form.ngay_ket_thuc && form.so_buoi_ke_hoach ? ' Dừng ở mốc đến trước: ngày kết thúc hoặc đủ số buổi kế hoạch.' : ''}
+                </p>
+              ) : null
+            ) : (
+              <p className="mt-1.5 text-xs text-slate-500">
+                Sửa lịch tuần không tự đổi các ngày đã có. Muốn thêm ngày theo lịch mới, bấm "Sinh thêm ngày".
+              </p>
+            )}
+          </div>
           <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
             <Link className="btn-phu" to="/lop">
               {laMoi ? 'Hủy' : 'Quay lại'}
             </Link>
-            <button className="btn-chinh" disabled={luu.isPending || !!loiSheet}>
-              {luu.isPending ? 'Đang lưu…' : laMoi ? 'Tạo lớp và sinh lịch' : 'Lưu thay đổi'}
+            <button className="btn-chinh" disabled={luu.isPending || !!loiSheet || !!loiLich}>
+              {luu.isPending ? 'Đang lưu…' : laMoi ? (coThu ? 'Tạo lớp và sinh lịch' : 'Tạo lớp') : 'Lưu thay đổi'}
             </button>
           </div>
         </form>

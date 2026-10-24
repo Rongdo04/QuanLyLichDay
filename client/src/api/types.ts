@@ -43,6 +43,7 @@ export interface Lop {
   so_buoi_ke_hoach: number | null;
   don_gia: number;
   lich_phan_cong: string | null;
+  lich_tuan: string | null; // JSON {"4":"C","7":"SC"}
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
@@ -96,7 +97,11 @@ export interface DuLieuLop {
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
   thu_tu?: number;
+  lich_tuan?: Record<string, DuKien> | null; // gửi lên dạng object
 }
+
+// Kết quả tạo lớp: kèm số ngày đã tự sinh theo lịch tuần
+export type LopVuaTao = Lop & { so_ngay_sinh: number; ngay_bo_qua?: { ngay: string; ly_do: string }[] };
 
 export interface NgayNghi {
   tu: string;

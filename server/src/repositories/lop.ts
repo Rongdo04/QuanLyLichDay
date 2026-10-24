@@ -17,6 +17,7 @@ export interface Lop {
   so_buoi_ke_hoach: number | null;
   don_gia: number;
   lich_phan_cong: string | null;
+  lich_tuan: string | null; // JSON {"4":"C","7":"SC"}
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
@@ -33,7 +34,7 @@ export interface LopDayDu extends Lop {
   tien_dc_dia_diem: number | null;
 }
 
-export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu'> & { thu_tu?: number };
+export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan'> & { thu_tu?: number; lich_tuan?: string | null };
 
 const SQL_LOP = `
   SELECT l.*, t.ma AS truong_ma, t.ten AS truong_ten,
@@ -166,6 +167,7 @@ export function nhanBanLop(id: number, ghiDe: Partial<DuLieuLop> = {}): LopDayDu
     so_buoi_ke_hoach: l.so_buoi_ke_hoach,
     don_gia: l.don_gia,
     lich_phan_cong: null,
+    lich_tuan: l.lich_tuan,
     ngay_bat_dau: null,
     ngay_ket_thuc: null,
     trang_thai: 'dang_day',

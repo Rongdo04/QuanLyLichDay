@@ -3,11 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, khoa } from '../api';
 import type { DuKien, KetQuaXemTruocLich, LopChiTiet } from '../api/types';
 import { congNgay, dinhDangNgay, homNay, NHAN_DU_KIEN, soBuoiDuKien, soThu } from '../lib/format';
-import { moTaThu, phanTichLichPhanCong, soBuoiTrongNgay, taoLichPhanCong, type LichTheoThu } from '../lib/nghiepVu';
+import { phanTichLichPhanCong, soBuoiTrongNgay, taoLichPhanCong, type LichTheoThu } from '../lib/nghiepVu';
 import { thongBao } from '../lib/thongBao';
+import { ChonThuTrongTuan, docLichTuan, lichTuanGui } from './ChonThuTrongTuan';
 
-const CAC_THU = [2, 3, 4, 5, 6, 7, 8];
-const TEN_THU: Record<number, string> = { 2: 'T2', 3: 'T3', 4: 'T4', 5: 'T5', 6: 'T6', 7: 'T7', 8: 'CN' };
 
 // Trình sinh lịch: chọn thứ trong tuần + khoảng ngày / số buổi → xem trước → xác nhận
 export function TrinhSinhLich({ lop, onXong }: { lop: LopChiTiet; onXong: () => void }) {
@@ -33,7 +32,8 @@ export function TrinhSinhLich({ lop, onXong }: { lop: LopChiTiet; onXong: () => 
   const [ketThuc, setKetThuc] = useState(
     lop.ngay_ket_thuc && lop.ngay_ket_thuc > batDauMacDinh ? lop.ngay_ket_thuc : congNgay(batDauMacDinh, 34),
   );
-  const [thu, setThu] = useState<LichTheoThu>(goiY.thu);
+  const lichTuanLuu = useMemo(() => docLichTuan(lop.lich_tuan), [lop.lich_tuan]);
+  const [thu, setThu] = useState<LichTheoThu>(Object.keys(lichTuanLuu).length ? lichTuanLuu : goiY.thu);
   const [boQuaNgayNghi, setBoQuaNgayNghi] = useState(true);
   const [ketQua, setKetQua] = useState<KetQuaXemTruocLich | null>(null);
   const [boChon, setBoChon] = useState<Set<string>>(new Set());
@@ -53,7 +53,7 @@ export function TrinhSinhLich({ lop, onXong }: { lop: LopChiTiet; onXong: () => 
         batDau,
         ketThuc: cheDo === 'ketThuc' ? ketThuc : null,
         soBuoi: cheDo === 'soBuoi' ? Number(soBuoi) : null,
-        thu: Object.fromEntries(Object.entries(thu).filter(([, v]) => v)) as Record<string, DuKien>,
+        thu: lichTuanGui(thu),
         boQuaNgayNghi,
       }),
     onSuccess: (kq) => {
@@ -87,7 +87,7 @@ export function TrinhSinhLich({ lop, onXong }: { lop: LopChiTiet; onXong: () => 
 
   return (
     <div className="space-y-4">
-      {Object.keys(goiY.thu).length > 0 && !ngayCuoi && (
+      {!Object.keys(lichTuanLuu).length && Object.keys(goiY.thu).length > 0 && !ngayCuoi && (
         <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
           Đã điền sẵn theo lịch phân công của lớp: <i>{lop.lich_phan_cong}</i>
         </p>
@@ -142,38 +142,7 @@ export function TrinhSinhLich({ lop, onXong }: { lop: LopChiTiet; onXong: () => 
 
       <div>
         <div className="nhan">Thứ trong tuần và buổi dự kiến</div>
-        <div className="grid grid-cols-7 gap-1.5">
-          {CAC_THU.map((t) => {
-            const dk = thu[t];
-            return (
-              <div
-                key={t}
-                className={`rounded-md border p-1.5 text-center ${dk ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white'}`}
-              >
-                <label className="flex cursor-pointer items-center justify-center gap-1 text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    checked={!!dk}
-                    onChange={(e) => setThu({ ...thu, [t]: e.target.checked ? 'S' : undefined })}
-                  />
-                  {TEN_THU[t]}
-                </label>
-                <select
-                  className="mt-1 w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-xs disabled:opacity-40"
-                  aria-label={`Buổi dự kiến ${TEN_THU[t]}`}
-                  disabled={!dk}
-                  value={dk ?? 'S'}
-                  onChange={(e) => setThu({ ...thu, [t]: e.target.value as DuKien })}
-                >
-                  <option value="S">Sáng</option>
-                  <option value="C">Chiều</option>
-                  <option value="SC">Cả ngày</option>
-                </select>
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-1.5 text-sm text-slate-600">{coThu ? moTaThu(thu) : 'Chọn ít nhất một thứ.'}</p>
+        <ChonThuTrongTuan thu={thu} onDoi={setThu} />
       </div>
 
       <label className="flex items-center gap-2 text-sm">

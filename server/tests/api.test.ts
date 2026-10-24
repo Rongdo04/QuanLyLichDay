@@ -268,3 +268,59 @@ describe('Lỗi chung', () => {
     expect(r3.body.loi).toBe('Mã số không hợp lệ');
   });
 });
+
+describe('Tạo lớp kèm lịch dạy hằng tuần', () => {
+  const lop = { truong_id: 3, ten_sheet: 'Mạng Máy tính_Thanh Trì', hoc_phan: 'Mạng máy tính', don_gia: 450 };
+
+  it('chọn sáng T5 + T6 từ 29/10 đến 04/12/2026 → tự sinh đúng 12 ngày', async () => {
+    const r = await api()
+      .post('/api/lop')
+      .send({ ...lop, ngay_bat_dau: '2026-10-29', ngay_ket_thuc: '2026-12-04', lich_tuan: { 5: 'S', 6: 'S' } })
+      .expect(201);
+    expect(r.body.so_ngay_sinh).toBe(12);
+    expect(JSON.parse(r.body.lich_tuan)).toEqual({ 5: 'S', 6: 'S' });
+    expect(r.body.lich_phan_cong).toBe('Sáng T5, T6. Bắt đầu từ sáng thứ 5 29/10/2026');
+    const ct = (await api().get(`/api/lop/${r.body.id}`)).body;
+    expect(ct.buoi).toHaveLength(12);
+    expect(ct.buoi.every((b: { du_kien: string; sang: number }) => b.du_kien === 'S' && b.sang === 0)).toBe(true);
+  });
+
+  it('chỉ có số buổi kế hoạch: sinh đến khi đủ buổi (cả ngày tính 2 buổi), tự điền ngày kết thúc', async () => {
+    const r = await api()
+      .post('/api/lop')
+      .send({ ...lop, ngay_bat_dau: '2026-10-28', so_buoi_ke_hoach: 18, lich_tuan: { 4: 'C', 7: 'SC' } })
+      .expect(201);
+    // Mỗi tuần 3 buổi (chiều T4 + cả ngày T7) → 6 tuần = 12 ngày
+    expect(r.body.so_ngay_sinh).toBe(12);
+    expect(r.body.ngay_ket_thuc).toBe('2026-12-05');
+    expect(r.body.lich_phan_cong).toBe('Chiều T4 và cả ngày T7. Bắt đầu từ chiều thứ 4 28/10/2026');
+  });
+
+  it('bỏ qua ngày nghỉ lễ trong Cài đặt', async () => {
+    await api().put('/api/cai-dat').send({ ngay_nghi: [{ tu: '2026-11-20', ten: 'Nhà giáo VN' }] }).expect(200);
+    const r = await api()
+      .post('/api/lop')
+      .send({ ...lop, ngay_bat_dau: '2026-10-29', ngay_ket_thuc: '2026-12-04', lich_tuan: { 5: 'S', 6: 'S' } })
+      .expect(201);
+    expect(r.body.so_ngay_sinh).toBe(11);
+    expect(r.body.ngay_bo_qua[0]).toMatchObject({ ngay: '2026-11-20' });
+  });
+
+  it('thiếu ngày bắt đầu hoặc mốc kết thúc thì báo lỗi, không tạo lớp', async () => {
+    let r = await api().post('/api/lop').send({ ...lop, lich_tuan: { 5: 'S' } }).expect(400);
+    expect(r.body.loi).toContain('ngày bắt đầu');
+    r = await api().post('/api/lop').send({ ...lop, ngay_bat_dau: '2026-10-29', lich_tuan: { 5: 'S' } }).expect(400);
+    expect(r.body.loi).toContain('ngày kết thúc hoặc số buổi');
+    expect((await api().get('/api/lop')).body).toHaveLength(0);
+  });
+
+  it('không chọn thứ nào thì tạo lớp như cũ; sửa lớp lưu được lịch tuần; nhân bản giữ lịch tuần', async () => {
+    const r = await api().post('/api/lop').send(lop).expect(201);
+    expect(r.body).toMatchObject({ so_ngay_sinh: 0, lich_tuan: null });
+    const s = await api().put(`/api/lop/${r.body.id}`).send({ lich_tuan: { 2: 'SC' } }).expect(200);
+    expect(s.body.lich_tuan).toBe('{"2":"SC"}');
+    const nb = await api().post(`/api/lop/${r.body.id}/nhan-ban`).send({}).expect(201);
+    expect(nb.body.lich_tuan).toBe('{"2":"SC"}');
+    expect((await api().put(`/api/lop/${r.body.id}`).send({ lich_tuan: {} }).expect(200)).body.lich_tuan).toBeNull();
+  });
+});
