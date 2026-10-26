@@ -4,6 +4,9 @@ import type { DuKien, TrangThai } from '../api/types';
 // Tiền lưu đơn vị nghìn đồng → hiển thị đồng đầy đủ: 6000 → "6.000.000 đ"
 export const dinhDangTien = (nghin: number) => `${(nghin * 1000).toLocaleString('vi-VN')} đ`;
 
+// Đơn vị của đơn giá: "buổi" hoặc "tiết"
+export const donViGia = (l: { tinh_theo?: string | null }) => (l.tinh_theo === 'tiet' ? 'tiết' : 'buổi');
+
 export const dinhDangSo = (n: number) => n.toLocaleString('vi-VN');
 
 // 'YYYY-MM-DD' → 'dd/mm/yyyy'

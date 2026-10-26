@@ -61,7 +61,7 @@ describe('saoLuu', () => {
   });
 
   it('API sao lưu', async () => {
-    const app = taoApp();
+    const app = taoApp({ boQuaDangNhap: true });
     const r = await request(app).post('/api/sao-luu').expect(201);
     expect(fs.existsSync(r.body.duong_dan)).toBe(true);
     const ds = await request(app).get('/api/sao-luu').expect(200);

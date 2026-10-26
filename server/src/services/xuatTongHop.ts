@@ -55,9 +55,9 @@ export async function xuatTongHop(loc: { tu?: string; den?: string } = {}) {
   const ws = wb.addWorksheet('Tổng hợp', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
-  ws.columns = [36, 26, 30, 11, 9, 10, 13, 11, 14].map((width) => ({ width, style: { font: FONT } }));
+  ws.columns = [36, 26, 30, 11, 9, 10, 13, 11, 14, 11, 14].map((width) => ({ width, style: { font: FONT } }));
   ghiChuDonVi(ws, ky, caiDat.ten_gv);
-  const COT = ['Trường', 'Lớp', 'Học phần', 'Số buổi KH', 'Đã dạy', 'Đơn giá', 'Tiền dạy', 'Tiền DC', 'Tổng'];
+  const COT = ['Trường', 'Lớp', 'Học phần', 'Số buổi KH', 'Đã dạy', 'Đơn giá', 'Tiền dạy', 'Tiền DC', 'Tổng', 'Thuế', 'Kể cả thuế'];
   dongTieuDe(ws, 4, COT);
 
   const tk = thongKe({ tu, den });
@@ -65,7 +65,11 @@ export async function xuatTongHop(loc: { tu?: string; den?: string } = {}) {
   for (const t of tk.truong) {
     for (const l of t.lop) {
       const row = ws.getRow(r++);
-      row.values = [t.ten, l.ten_sheet, l.hoc_phan, l.so_buoi_ke_hoach, l.soBuoi, l.don_gia, l.tienDay, l.tienDc, l.tong];
+      row.values = [
+        t.ten, l.ten_sheet, l.hoc_phan, l.so_buoi_ke_hoach, l.soBuoi, l.don_gia, l.tienDay, l.tienDc, l.tong,
+        l.tienThue || null, l.tongCoThue,
+      ];
+      if (l.tinh_theo === 'tiet') row.getCell(6).numFmt = '#,##0" /tiết"';
     }
   }
   const dongCuoi = r - 1;
@@ -75,6 +79,8 @@ export async function xuatTongHop(loc: { tu?: string; den?: string } = {}) {
   rowTong.getCell(7).value = oTong('G', 5, dongCuoi, tk.tong.tienDay);
   rowTong.getCell(8).value = oTong('H', 5, dongCuoi, tk.tong.tienDc);
   rowTong.getCell(9).value = oTong('I', 5, dongCuoi, tk.tong.tong);
+  rowTong.getCell(10).value = oTong('J', 5, dongCuoi, tk.tong.tienThue);
+  rowTong.getCell(11).value = oTong('K', 5, dongCuoi, tk.tong.tongCoThue);
   for (let rr = 5; rr <= r; rr++) {
     for (let c = 1; c <= COT.length; c++) {
       const o = ws.getCell(rr, c);

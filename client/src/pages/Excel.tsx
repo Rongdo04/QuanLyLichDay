@@ -279,6 +279,8 @@ function NhapExcel() {
           so_tiet: d.goc.so_tiet,
           so_buoi_ke_hoach: d.goc.so_buoi_ke_hoach,
           don_gia: Number(d.don_gia),
+          tinh_theo: d.goc.tinh_theo,
+          tiet_moi_buoi: d.goc.tiet_moi_buoi,
           lich_phan_cong: d.goc.lich_phan_cong,
           trang_thai: d.trang_thai,
           dia_diem_id: d.dia_diem && d.dia_diem !== 'moi' ? Number(d.dia_diem) : null,
@@ -484,6 +486,7 @@ function NhapExcel() {
                               d.goc.lop_van_hoa && `văn hóa ${d.goc.lop_van_hoa}`,
                               d.goc.so_tiet && `${d.goc.so_tiet} tiết`,
                               d.goc.so_buoi_ke_hoach && `${d.goc.so_buoi_ke_hoach} buổi KH`,
+                              d.goc.tinh_theo === 'tiet' && `tính theo tiết (${d.goc.tiet_moi_buoi} tiết/buổi)`,
                             ]
                               .filter(Boolean)
                               .join(' · ')}

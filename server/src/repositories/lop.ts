@@ -1,6 +1,7 @@
 import { layDb } from '../db/connection.js';
 import { LoiApp } from '../utils/loi.js';
-import { tinhLop, type KetQuaLop } from '../services/tinhTien.js';
+import { tinhLop, type KetQuaLop, type TinhTheo } from '../services/tinhTien.js';
+import { layCaiDat } from './caiDat.js';
 import { buoiCuaLop, type Buoi } from './buoi.js';
 import { capNhat, chen, xoa } from './chung.js';
 
@@ -17,6 +18,8 @@ export interface Lop {
   so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
+  tinh_theo: TinhTheo;
+  tiet_moi_buoi: number;
   lich_phan_cong: string | null;
   lich_tuan: string | null; // JSON {"4":"C","7":"SC"}
   ngay_bat_dau: string | null;
@@ -30,19 +33,22 @@ export interface Lop {
 export interface LopDayDu extends Lop {
   truong_ma: string;
   truong_ten: string;
+  thue_truong: number;
   dia_diem_ten: string | null;
   dia_diem_ten_day_du: string | null;
   tien_dc_dia_diem: number | null;
 }
 
-export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan' | 'so_tiet'> & {
+export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan' | 'so_tiet' | 'tinh_theo' | 'tiet_moi_buoi'> & {
+  tinh_theo?: TinhTheo;
+  tiet_moi_buoi?: number;
   thu_tu?: number;
   lich_tuan?: string | null;
   so_tiet?: number | null;
 };
 
 const SQL_LOP = `
-  SELECT l.*, t.ma AS truong_ma, t.ten AS truong_ten,
+  SELECT l.*, t.ma AS truong_ma, t.ten AS truong_ten, t.thue AS thue_truong,
          d.ten_ngan AS dia_diem_ten, d.ten_day_du AS dia_diem_ten_day_du, d.tien_dc AS tien_dc_dia_diem
   FROM lop l
   JOIN truong t ON t.id = l.truong_id
@@ -121,7 +127,12 @@ function thuTuTiepTheo(truongId: number): number {
 export function taoLop(d: DuLieuLop): LopDayDu {
   kiemTraThamChieu(d);
   kiemTraTenSheet(d.truong_id, d.ten_sheet);
-  const id = chen('lop', { ...d, thu_tu: d.thu_tu ?? thuTuTiepTheo(d.truong_id) });
+  const id = chen('lop', {
+    ...d,
+    tinh_theo: d.tinh_theo ?? 'buoi',
+    tiet_moi_buoi: d.tiet_moi_buoi ?? layCaiDat().tiet_moi_buoi,
+    thu_tu: d.thu_tu ?? thuTuTiepTheo(d.truong_id),
+  });
   return layLop(id)!;
 }
 
@@ -172,6 +183,8 @@ export function nhanBanLop(id: number, ghiDe: Partial<DuLieuLop> = {}): LopDayDu
     so_tiet: l.so_tiet,
     so_buoi_ke_hoach: l.so_buoi_ke_hoach,
     don_gia: l.don_gia,
+    tinh_theo: l.tinh_theo,
+    tiet_moi_buoi: l.tiet_moi_buoi,
     lich_phan_cong: null,
     lich_tuan: l.lich_tuan,
     ngay_bat_dau: null,

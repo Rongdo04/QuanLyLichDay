@@ -26,6 +26,8 @@ export async function goiApi<T>(duongDan: string, tc: TuyChonGoi = {}): Promise<
   } catch {
     throw new LoiApi(0, 'Không kết nối được máy chủ. Hãy kiểm tra phần mềm còn đang chạy.');
   }
+  // Phiên hết hạn / bị đăng xuất ở nơi khác → báo cho màn đăng nhập
+  if (res.status === 401 && !duongDan.startsWith('/tai-khoan')) window.dispatchEvent(new Event('het-phien'));
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new LoiApi(res.status, data?.loi ?? `Lỗi máy chủ (${res.status})`);

@@ -27,6 +27,8 @@ const schemaLop = z.object({
   so_tiet: z.number().int().min(1).max(2000).nullish().transform((v) => v ?? null),
   so_buoi_ke_hoach: z.number().int().min(1).nullish().transform((v) => v ?? null),
   don_gia: z.number().int().min(0),
+  tinh_theo: z.enum(['buoi', 'tiet']).optional(),
+  tiet_moi_buoi: z.number().int().min(1).max(20).optional(),
   lich_phan_cong: zChuoiTuyChon,
   lich_tuan: zLichTuan,
   ngay_bat_dau: zNgay.nullish().transform((v) => v ?? null),

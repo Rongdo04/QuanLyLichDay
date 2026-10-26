@@ -103,8 +103,11 @@ CREATE TABLE lop (                   -- một lớp + một học phần = một
   ma_lop          TEXT,                -- 'CT.10T1'
   lop_van_hoa     TEXT,                -- '11A6'
   hoc_phan        TEXT NOT NULL,       -- 'Vẽ kỹ thuật và Autocad'
+  so_tiet         INTEGER,             -- 45 (tổng số tiết của học phần)
   so_buoi_ke_hoach INTEGER,            -- 15 (đơn vị: buổi = 1 ô sáng hoặc chiều)
-  don_gia         INTEGER NOT NULL,    -- nghìn đồng / buổi: 350, 400, 450
+  don_gia         INTEGER NOT NULL,    -- nghìn đồng / buổi: 350, 400, 450 (hoặc / tiết nếu tinh_theo = 'tiet')
+  tinh_theo       TEXT NOT NULL DEFAULT 'buoi', -- 'buoi' | 'tiet'
+  tiet_moi_buoi   INTEGER NOT NULL DEFAULT 5,   -- số tiết một buổi, lấy theo Cài đặt khi tạo lớp
   lich_phan_cong  TEXT,                -- 'Chiều T4 và ngày T7. Bắt đầu từ chiều thứ 4 28/10/2026'
   ngay_bat_dau    TEXT,
   ngay_ket_thuc   TEXT,
@@ -135,9 +138,10 @@ Các quy tắc dưới đây được suy ra trực tiếp từ công thức tro
 | Đại lượng | Công thức cũ trong Excel | Quy tắc trong phần mềm |
 |---|---|---|
 | **Số buổi** | `COUNTA(C5:D…)` | Tổng số ô Sáng và Chiều có đánh dấu. Một ngày dạy cả sáng lẫn chiều tính **2 buổi**. |
-| **Tiền dạy** | `COUNTA(...)*400` | `số buổi × lop.don_gia` |
+| **Tiền dạy** | `COUNTA(...)*400` (theo tiết: `COUNTA(...)*5*80`) | `số buổi × lop.don_gia`; theo tiết: `số buổi × tiet_moi_buoi × lop.don_gia` |
 | **Tiền DC** (di chuyển) | `SWITCH(E5,"Thạch Thất",66,"Chương Mỹ",75,0)` cho **mỗi dòng ngày** | Với mỗi ngày có **ít nhất 1 buổi đã dạy** (`sang OR chieu`) và `co_tien_dc = 1`: cộng `dia_diem.tien_dc` của lớp. Tính **theo ngày, không theo buổi**. Ngày dạy cả sáng và chiều chỉ tính 1 lần. |
 | **Tổng** | `SUM(F5:F…, G5)` | `Tiền dạy + Σ Tiền DC` |
+| **Thuế** (`truong.thue`, mặc định 10% cho mọi trường; 0 = không thuế) | dòng 7–8: `=ROUND(G5*10/100,0)` và `=H5+H7` | Số ở trên là **tiền nhận về**. Thuế = `round(Tiền dạy × thue / 100)`, **không** tính trên tiền DC. Kể cả thuế = `Tổng + Thuế`. |
 | **Tiến độ** | – | `số buổi đã dạy / so_buoi_ke_hoach` |
 
 **Khác biệt cần lưu ý:** file cũ tính tiền DC cho mọi dòng có ghi "Thạch Thất", kể cả ngày chưa dạy. Phần mềm chỉ tính cho ngày đã dạy. Khi xuất Excel, cột Tiền DC ghi giá trị số đã tính (xem mục 8), và **chỉ điền chữ địa điểm vào cột Ghi chú với những ngày đã dạy**, để file Excel khớp với phần mềm.
@@ -252,7 +256,7 @@ Tên sheet lấy từ `lop.ten_sheet`, theo thứ tự `thu_tu`. Bố cục chu�
 | C5↓, D5↓ | `x` nếu đã dạy, trống nếu không | căn giữa |
 | E5↓ | `dia_diem.ten_ngan` nếu ngày đó đã dạy và lớp có địa điểm, nối thêm `buoi.ghi_chu` nếu có (`Thạch Thất - dạy bù`) | căn trái |
 | F5↓ | **giá trị số** tiền DC đã tính cho ngày đó (ví dụ `66`); để trống nếu bằng 0. Không dùng công thức `SWITCH` như file cũ, vì hàm này cần Excel 2019 trở lên và hay lỗi trên bản cũ hoặc LibreOffice. | căn giữa |
-| G5 | công thức `=COUNTA(C5:D{last})*{don_gia}` kèm `result` đã tính sẵn | `#,##0`, căn giữa |
+| G5 | công thức `=COUNTA(C5:D{last})*{don_gia}` (theo tiết: `*{tiet_moi_buoi}*{don_gia}`) kèm `result` đã tính sẵn | `#,##0`, căn giữa |
 | H5 | công thức `=SUM(F5:F{last},G5)` kèm `result` | `#,##0`, căn trái |
 | K4…K9 | khối thông tin, mỗi dòng 1 ô (xem dưới) | Times New Roman 13, căn trái, không viền |
 
@@ -287,7 +291,7 @@ Mục đích: đưa dữ liệu từ các file hiện có vào hệ thống **m�
 Thuật toán cho mỗi sheet:
 1. Tìm ô có giá trị `NGÀY` ở cột A (có thể ở dòng 1 hoặc dòng 2, vì file cũ có 2 kiểu). Dòng dữ liệu đầu tiên = dòng đó + 3.
 2. Đọc từ dòng đầu tiên trở xuống cho đến khi cột A không còn là ngày. Mỗi dòng gồm: ngày (A), sáng (C có chữ khác rỗng), chiều (D), ghi chú (E).
-3. Đọc đơn giá từ công thức ô G đầu tiên bằng regex `\*(\d+)\s*$` trên chuỗi công thức `=COUNTA(...)*400`.
+3. Đọc đơn giá từ công thức ô G đầu tiên bằng regex `\*(\d+)\s*$` trên chuỗi công thức `=COUNTA(...)*400`. Dạng `=COUNTA(...)*5*80` là tính theo tiết (5 tiết / buổi, 80 / tiết).
 4. Quét các cột I…M tìm các dòng có tiền tố `Địa điểm:`, `Lớp:`, `Học phần:`, `Lịch phân công:` và tách ra:
    - `Lớp: CT.10T1 (Lớp văn hóa: 11A6)` → `ma_lop = CT.10T1`, `lop_van_hoa = 11A6`
    - `Học phần: Tin học (9 buổi)` → `hoc_phan = Tin học`, `so_buoi_ke_hoach = 9`

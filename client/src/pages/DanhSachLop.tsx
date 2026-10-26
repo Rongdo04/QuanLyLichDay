@@ -137,7 +137,10 @@ export function TrangDanhSachLop() {
                     </div>
                   </td>
                   <td title={l.truong_ten}>{l.truong_ma}</td>
-                  <td className="text-right tabular-nums">{dinhDangTien(l.don_gia)}</td>
+                  <td className="text-right tabular-nums">
+                    {dinhDangTien(l.don_gia)}
+                    {l.tinh_theo === 'tiet' && <div className="text-xs text-slate-500">/ tiết</div>}
+                  </td>
                   <td>
                     <ThanhTienDo da={l.soBuoi} keHoach={l.so_buoi_ke_hoach} />
                   </td>

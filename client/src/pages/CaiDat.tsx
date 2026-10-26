@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, khoa } from '../api';
 import type { CaiDat, MaNhaCungCap, NgayNghi } from '../api/types';
 import { BaoLoiTai, DangTai, TieuDeTrang } from '../components/ChungUI';
+import { useNguoiDung } from '../components/CongDangNhap';
 import { dinhDangDungLuong, dinhDangNgay } from '../lib/format';
 import { thongBao } from '../lib/thongBao';
 
 export function TrangCaiDat() {
   const qc = useQueryClient();
+  const toi = useNguoiDung();
   const { data, isLoading, error } = useQuery({ queryKey: khoa.caiDat, queryFn: api.caiDat.lay });
   const [form, setForm] = useState<CaiDat | null>(null);
   useEffect(() => {
@@ -71,7 +73,7 @@ export function TrangCaiDat() {
                 onChange={(e) => doi('nam_hoc', e.target.value)}
               />
             </O>
-            <O nhan="Số tiết một buổi" id="tiet-moi-buoi">
+            <O nhan="Số tiết một buổi (mặc định cho lớp mới)" id="tiet-moi-buoi">
               <input
                 id="tiet-moi-buoi"
                 type="number"
@@ -168,15 +170,17 @@ export function TrangCaiDat() {
             <h2 className="font-medium">Sao lưu</h2>
           </div>
           <div className="p-4">
-            <O nhan="Thư mục sao lưu" id="thu-muc">
-              <input
-                id="thu-muc"
-                className="o-nhap"
-                value={form.thu_muc_sao_luu}
-                placeholder="Để trống = thư mục data/backups của phần mềm"
-                onChange={(e) => doi('thu_muc_sao_luu', e.target.value)}
-              />
-            </O>
+            {toi?.la_quan_tri ? (
+              <O nhan="Thư mục sao lưu" id="thu-muc">
+                <input
+                  id="thu-muc"
+                  className="o-nhap"
+                  value={form.thu_muc_sao_luu}
+                  placeholder="Để trống = thư mục data/backups của phần mềm"
+                  onChange={(e) => doi('thu_muc_sao_luu', e.target.value)}
+                />
+              </O>
+            ) : null}
             <p className="mt-1 text-xs text-slate-500">
               Mỗi lần mở phần mềm sẽ tự sao lưu nếu bản gần nhất đã quá 24 giờ. Giữ lại 30 bản mới nhất. Có thể đặt thư mục
               trong OneDrive / Google Drive để có thêm bản trên mạng.
@@ -192,8 +196,56 @@ export function TrangCaiDat() {
       </form>
 
       <SaoLuu />
+      <DoiMatKhau />
       <KhoaAi />
     </>
+  );
+}
+
+function DoiMatKhau() {
+  const rong = { cu: '', moi: '', nhapLai: '' };
+  const [f, setF] = useState(rong);
+  const [loi, setLoi] = useState('');
+  // Mở từ link "Đổi mật khẩu" ở trang Hồ sơ → cuộn tới đây
+  useEffect(() => {
+    if (window.location.hash === '#doi-mat-khau') document.getElementById('mk-cu')?.focus();
+  }, []);
+  const doiMk = useMutation({
+    mutationFn: () => api.taiKhoan.doiMatKhau({ mat_khau_cu: f.cu, mat_khau_moi: f.moi }),
+    onSuccess: () => {
+      setF(rong);
+      thongBao('Đã đổi mật khẩu. Các nơi khác đang đăng nhập tài khoản này đã bị đăng xuất.');
+    },
+  });
+  const gui = (e: FormEvent) => {
+    e.preventDefault();
+    if (f.moi !== f.nhapLai) return setLoi('Hai lần nhập mật khẩu mới không giống nhau');
+    setLoi('');
+    doiMk.mutate();
+  };
+  return (
+    <form onSubmit={gui} id="doi-mat-khau" className="the mt-4 scroll-mt-4">
+      <div className="the-dau">
+        <h2 className="font-medium">Đổi mật khẩu</h2>
+      </div>
+      <div className="grid gap-3 p-4 sm:grid-cols-3">
+        <O nhan="Mật khẩu hiện tại" id="mk-cu">
+          <input id="mk-cu" type="password" className="o-nhap" required autoComplete="current-password" value={f.cu} onChange={(e) => setF({ ...f, cu: e.target.value })} />
+        </O>
+        <O nhan="Mật khẩu mới (ít nhất 6 ký tự)" id="mk-moi">
+          <input id="mk-moi" type="password" className="o-nhap" required minLength={6} autoComplete="new-password" value={f.moi} onChange={(e) => setF({ ...f, moi: e.target.value })} />
+        </O>
+        <O nhan="Nhập lại mật khẩu mới" id="mk-nhap-lai">
+          <input id="mk-nhap-lai" type="password" className="o-nhap" required autoComplete="new-password" value={f.nhapLai} onChange={(e) => setF({ ...f, nhapLai: e.target.value })} />
+        </O>
+      </div>
+      <div className="flex items-center justify-end gap-3 px-4 pb-4">
+        {loi && <span className="text-sm text-red-600">{loi}</span>}
+        <button className="btn-chinh" disabled={doiMk.isPending}>
+          {doiMk.isPending ? 'Đang đổi…' : 'Đổi mật khẩu'}
+        </button>
+      </div>
+    </form>
   );
 }
 

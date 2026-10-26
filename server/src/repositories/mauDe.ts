@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DATA_DIR, layDb } from '../db/connection.js';
+import { layDb, thuMucDuLieu } from '../db/connection.js';
 import { LoiApp } from '../utils/loi.js';
 import { capNhat, chen } from './chung.js';
 
@@ -24,7 +24,7 @@ export interface MauDeDayDu extends Omit<MauDe, 'cau_truc'> {
 
 // Mẫu có sẵn nằm trong server/mau-de; mẫu tải lên nằm trong data/mau-de (đi cùng dữ liệu khi chép máy)
 export const THU_MUC_MAU_SAN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../mau-de');
-export const thuMucMauTaiLen = () => path.join(DATA_DIR, 'mau-de');
+export const thuMucMauTaiLen = () => path.join(thuMucDuLieu(), 'mau-de');
 
 function docCauTruc(s: string): number[] {
   try {
