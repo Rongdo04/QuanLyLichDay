@@ -12,6 +12,8 @@ import type {
   MaNhaCungCap,
   MauDe,
   Mon,
+  NguoiDung,
+  TrangThaiDangNhap,
   OCau,
   ODienMau,
   ThongTinDe,
@@ -73,6 +75,8 @@ export const khoa = {
   mauDe: ['mau-de'] as const,
   deThi: ['de-thi'] as const,
   ai: ['ai'] as const,
+  toi: ['tai-khoan', 'toi'] as const,
+  nguoiDung: ['tai-khoan', 'nguoi-dung'] as const,
 };
 
 // Gửi form có file (tên file gửi kèm để giữ đúng tiếng Việt)
@@ -89,7 +93,24 @@ type DuLieuMauDe = { ten: string; truong_id: number | null; cau_truc: number[]; 
 type DuLieuTruong = Pick<Truong, 'ma' | 'ten' | 'ghi_chu'> & { da_an?: number };
 type DuLieuDiaDiem = Pick<DiaDiem, 'ten_ngan' | 'ten_day_du' | 'tien_dc'>;
 
+type DuLieuNguoiDungMoi = { ten_dang_nhap: string; ho_ten: string; email?: string; mat_khau: string; la_quan_tri?: boolean };
+
 export const api = {
+  taiKhoan: {
+    toi: () => goiApi<TrangThaiDangNhap>('/tai-khoan/toi'),
+    khoiTao: (d: DuLieuNguoiDungMoi) =>
+      goiApi<{ nguoi_dung: NguoiDung }>('/tai-khoan/khoi-tao', { json: d }),
+    dangNhap: (d: { ten_dang_nhap: string; mat_khau: string }) =>
+      goiApi<{ nguoi_dung: NguoiDung }>('/tai-khoan/dang-nhap', { json: d }),
+    dangXuat: () => goiApi<void>('/tai-khoan/dang-xuat', { method: 'POST' }),
+    suaToi: (d: { ho_ten?: string; email?: string }) => goiApi<NguoiDung>('/tai-khoan/toi', { method: 'PUT', json: d }),
+    doiMatKhau: (d: { mat_khau_cu: string; mat_khau_moi: string }) =>
+      goiApi<void>('/tai-khoan/mat-khau', { method: 'PUT', json: d }),
+    ds: () => goiApi<NguoiDung[]>('/tai-khoan/nguoi-dung'),
+    tao: (d: DuLieuNguoiDungMoi) => goiApi<NguoiDung>('/tai-khoan/nguoi-dung', { json: d }),
+    sua: (id: number, d: { ho_ten?: string; email?: string; mat_khau?: string; bi_khoa?: boolean; la_quan_tri?: boolean }) =>
+      goiApi<NguoiDung>(`/tai-khoan/nguoi-dung/${id}`, { method: 'PUT', json: d }),
+  },
   truong: {
     ds: () => goiApi<Truong[]>('/truong'),
     tao: (d: DuLieuTruong) => goiApi<Truong>('/truong', { json: d }),

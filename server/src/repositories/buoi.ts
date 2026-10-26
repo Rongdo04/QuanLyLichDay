@@ -19,8 +19,11 @@ export interface BuoiDayDu extends Buoi {
   ten_sheet: string;
   hoc_phan: string;
   don_gia: number;
+  tinh_theo: string;
+  tiet_moi_buoi: number;
   truong_id: number;
   truong_ma: string;
+  thue_truong: number;
   lich_tuan: string | null;
   lich_phan_cong: string | null;
   dia_diem_ten: string | null;
@@ -43,7 +46,7 @@ export function dsBuoi(loc: LocBuoi = {}): BuoiDayDu[] {
   if (loc.lopId) (dk.push('b.lop_id = @lopId'), (ts.lopId = loc.lopId));
   return layDb()
     .prepare(
-      `SELECT b.*, l.ten_sheet, l.hoc_phan, l.don_gia, l.truong_id, l.lich_tuan, l.lich_phan_cong, t.ma AS truong_ma,
+      `SELECT b.*, l.ten_sheet, l.hoc_phan, l.don_gia, l.tinh_theo, l.tiet_moi_buoi, l.truong_id, l.lich_tuan, l.lich_phan_cong, t.ma AS truong_ma, t.thue AS thue_truong,
               d.ten_ngan AS dia_diem_ten, d.tien_dc AS tien_dc_dia_diem
        FROM buoi b
        JOIN lop l ON l.id = b.lop_id

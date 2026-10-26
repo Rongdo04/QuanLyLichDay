@@ -35,10 +35,21 @@ Vào mục **Đề thi**. Đề là đề lý thuyết tự luận, mỗi lần 
    - Tải lên trong tab *Mẫu đề theo trường*. Nhận cả file `.doc`, phần mềm tự chuyển sang `.docx` nhờ Word có trên máy.
 4. Các đề đã sinh được lưu trong tab *Đề đã sinh* để tải lại. Sửa ngân hàng câu hỏi sau đó không làm thay đổi đề cũ.
 
+## Tài khoản (nhiều người dùng)
+
+- Mở phần mềm sẽ thấy màn **đăng nhập** (bằng tên đăng nhập hoặc email). Nếu chưa có tài khoản nào thì hiện form *Tạo tài khoản*: tài khoản đầu tiên là **quản trị** và giữ toàn bộ dữ liệu đang có.
+- Quản trị vào menu **Tài khoản** để tạo tài khoản cho người khác, đặt lại mật khẩu khi họ quên, hoặc khóa tài khoản. Mỗi người có dữ liệu **riêng hoàn toàn**: trường, lớp, lịch, đề thi, cài đặt, sao lưu. Không ai thấy dữ liệu của người khác.
+- Mỗi người tự đổi mật khẩu trong **Cài đặt → Đổi mật khẩu**. Đăng xuất ở góc dưới thanh menu.
+- **Quản trị quên mật khẩu:** trên máy chạy server, mở cửa sổ lệnh trong thư mục phần mềm và chạy
+  `npm run tai-khoan -w server -- dat-lai <tên đăng nhập hoặc email> <mật khẩu mới>`.
+  Xem danh sách tài khoản: `npm run tai-khoan -w server -- ds`. Tạo tài khoản: `npm run tai-khoan -w server -- tao <tên> <mật khẩu> [email] [họ tên] [--quan-tri]`.
+- **Đưa lên mạng cho người ở xa dùng:** cách dễ nhất là [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), trỏ về `http://localhost:3000`. Tunnel tự có HTTPS, và server vẫn chỉ nghe trên máy này. Muốn máy khác trong mạng nội bộ vào thẳng thì chạy với `HOST=0.0.0.0`.
+
 ## Dữ liệu và sao lưu
 
 - Toàn bộ dữ liệu nằm trong thư mục **`data/`**. Muốn chuyển sang máy khác, chỉ cần chép cả thư mục phần mềm, trong đó có `data/`.
 - Mỗi lần mở phần mềm sẽ tự sao lưu vào `data/backups/` nếu bản gần nhất đã quá 24 giờ. Phần mềm giữ 30 bản mới nhất. Có thể bấm *Sao lưu ngay* hoặc đổi thư mục sao lưu trong *Cài đặt*.
+- Tài khoản và phiên đăng nhập nằm trong `data/he-thong.db`. Dữ liệu của quản trị đầu tiên vẫn là `data/giangday.db`; người dùng khác ở `data/nguoi-dung/<số>/` (có `giangday.db`, `backups/`, `mau-de/` riêng).
 - Mẫu đề tải lên nằm trong `data/mau-de/`. Bản sao lưu tự động chỉ chép file dữ liệu `.db`, nên khi chuyển máy hãy chép cả thư mục `data/`.
 - **Khôi phục từ bản sao lưu:** tắt phần mềm, chép file `giangday_YYYYMMDD_HHmmss.db` cần dùng đè lên `data/giangday.db`, xóa hai file `giangday.db-wal` và `giangday.db-shm` nếu có, rồi mở lại.
 

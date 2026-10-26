@@ -11,6 +11,7 @@ interface FormTruong {
   ma: string;
   ten: string;
   ghi_chu: string;
+  thue: string;
 }
 
 export function TrangTruong() {
@@ -20,7 +21,7 @@ export function TrangTruong() {
 
   const luu = useMutation({
     mutationFn: (f: FormTruong) => {
-      const d = { ma: f.ma.trim().toUpperCase(), ten: f.ten.trim(), ghi_chu: f.ghi_chu.trim() || null };
+      const d = { ma: f.ma.trim().toUpperCase(), ten: f.ten.trim(), ghi_chu: f.ghi_chu.trim() || null, thue: Number(f.thue) || 0 };
       return f.id ? api.truong.sua(f.id, d) : api.truong.tao(d);
     },
     onSuccess: () => {
@@ -52,7 +53,7 @@ export function TrangTruong() {
   return (
     <>
       <TieuDeTrang tieuDe="Trường" phu="Các trường đang dạy thỉnh giảng. Trường không còn dạy thì ẩn đi thay vì xóa.">
-        <button className="btn-chinh" onClick={() => setForm({ ma: '', ten: '', ghi_chu: '' })}>
+        <button className="btn-chinh" onClick={() => setForm({ ma: '', ten: '', ghi_chu: '', thue: '10' })}>
           + Thêm trường
         </button>
       </TieuDeTrang>
@@ -73,6 +74,7 @@ export function TrangTruong() {
                 <th className="w-28">Mã</th>
                 <th>Tên trường</th>
                 <th>Ghi chú</th>
+                <th className="w-20 text-right">Thuế</th>
                 <th className="w-20 text-right">Số lớp</th>
                 <th className="w-64" />
               </tr>
@@ -86,6 +88,7 @@ export function TrangTruong() {
                     {t.da_an ? <span className="ml-2 text-xs">(đã ẩn)</span> : null}
                   </td>
                   <td className="text-slate-500">{t.ghi_chu}</td>
+                  <td className="text-right tabular-nums">{t.thue ? `${t.thue}%` : '—'}</td>
                   <td className="text-right tabular-nums">
                     {t.so_lop > 0 ? (
                       <Link className="lien-ket" to={`/lop?truong=${t.id}`}>
@@ -99,7 +102,7 @@ export function TrangTruong() {
                     <div className="flex justify-end gap-1.5">
                       <button
                         className="btn-phu btn-nho"
-                        onClick={() => setForm({ id: t.id, ma: t.ma, ten: t.ten, ghi_chu: t.ghi_chu ?? '' })}
+                        onClick={() => setForm({ id: t.id, ma: t.ma, ten: t.ten, ghi_chu: t.ghi_chu ?? '', thue: String(t.thue) })}
                       >
                         Sửa
                       </button>
@@ -165,6 +168,24 @@ export function TrangTruong() {
                 value={form.ghi_chu}
                 onChange={(e) => setForm({ ...form, ghi_chu: e.target.value })}
               />
+            </div>
+            <div>
+              <label className="nhan" htmlFor="thue-truong">
+                Thuế (%)
+              </label>
+              <input
+                id="thue-truong"
+                type="number"
+                min={0}
+                max={100}
+                className="o-nhap"
+                placeholder="0 = không có thuế"
+                value={form.thue}
+                onChange={(e) => setForm({ ...form, thue: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Cộng thêm trên tiền dạy (không tính tiền DC). VD 10%: đơn giá 400 → 440 / buổi.
+              </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" className="btn-phu" onClick={() => setForm(null)}>

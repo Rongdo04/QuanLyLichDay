@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import dayjs from 'dayjs';
-import { DATA_DIR, layDb } from '../db/connection.js';
+import { layDb, layKhongGian, thuMucDuLieu } from '../db/connection.js';
 import { layCaiDat } from '../repositories/caiDat.js';
 
 // Sao lưu DB: data/backups/giangday_YYYYMMDD_HHmmss.db, giữ 30 bản mới nhất
@@ -16,11 +16,15 @@ export interface BanSaoLuu {
   luc: string; // 'YYYY-MM-DD HH:mm:ss'
 }
 
-// Thư mục sao lưu: theo Cài đặt (đường dẫn tương đối tính từ thư mục data/), mặc định data/backups
+// Thư mục sao lưu: mặc định backups/ trong thư mục dữ liệu của người dùng.
+// Chỉ quản trị (hoặc chạy không đăng nhập) được đặt thư mục khác trong Cài đặt — người dùng
+// thường không được ghi file ra ngoài thư mục của mình trên máy chủ.
 export function thuMucSaoLuu(): string {
+  const goc = thuMucDuLieu();
   const caiDat = layCaiDat().thu_muc_sao_luu?.trim();
-  if (!caiDat) return path.join(DATA_DIR, 'backups');
-  return path.isAbsolute(caiDat) ? caiDat : path.resolve(DATA_DIR, caiDat);
+  const kg = layKhongGian();
+  if (!caiDat || (kg && !kg.laQuanTri)) return path.join(goc, 'backups');
+  return path.isAbsolute(caiDat) ? caiDat : path.resolve(goc, caiDat);
 }
 
 // Thời điểm của bản sao lưu: đọc từ tên file (copy thư mục sang máy khác không làm sai)

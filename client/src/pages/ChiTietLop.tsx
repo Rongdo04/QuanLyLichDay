@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, khoa } from '../api';
-import type { DuLieuLop, Lop, TrangThai } from '../api/types';
+import type { DuLieuLop, Lop, TinhTheo, TrangThai } from '../api/types';
 import { BaoLoiTai, DangTai, Modal, NhanTrangThai, ThanhTienDo } from '../components/ChungUI';
 import { ChonThuTrongTuan, docLichTuan, lichTuanGui } from '../components/ChonThuTrongTuan';
 import { TrinhSinhLich } from '../components/TrinhSinhLich';
-import { dinhDangNgay, dinhDangTien, NHAN_TRANG_THAI } from '../lib/format';
+import { dinhDangNgay, dinhDangTien, donViGia, NHAN_TRANG_THAI } from '../lib/format';
 import { useDsDiaDiem, useDsLop, useDsTruong } from '../lib/hooks';
 import { phanTichLichPhanCong, sinhLichChiTiet, soBuoiTheoDuKien, type LichTheoThu } from '../lib/nghiepVu';
 import { thongBao } from '../lib/thongBao';
@@ -22,6 +22,8 @@ interface FormLop {
   so_tiet: string;
   so_buoi_ke_hoach: string;
   don_gia: string;
+  tinh_theo: TinhTheo;
+  tiet_moi_buoi: string; // '' = lấy theo Cài đặt
   lich_phan_cong: string;
   ngay_bat_dau: string;
   ngay_ket_thuc: string;
@@ -39,6 +41,8 @@ const formRong = (truongId = ''): FormLop => ({
   so_tiet: '',
   so_buoi_ke_hoach: '',
   don_gia: '',
+  tinh_theo: 'buoi',
+  tiet_moi_buoi: '',
   lich_phan_cong: '',
   ngay_bat_dau: '',
   ngay_ket_thuc: '',
@@ -56,6 +60,8 @@ const tuLop = (l: Lop): FormLop => ({
   so_tiet: l.so_tiet ? String(l.so_tiet) : '',
   so_buoi_ke_hoach: l.so_buoi_ke_hoach ? String(l.so_buoi_ke_hoach) : '',
   don_gia: String(l.don_gia),
+  tinh_theo: l.tinh_theo,
+  tiet_moi_buoi: String(l.tiet_moi_buoi),
   lich_phan_cong: l.lich_phan_cong ?? '',
   ngay_bat_dau: l.ngay_bat_dau ?? '',
   ngay_ket_thuc: l.ngay_ket_thuc ?? '',
@@ -76,6 +82,8 @@ function sangDuLieu(f: FormLop): DuLieuLop {
     so_tiet: f.so_tiet ? Number(f.so_tiet) : null,
     so_buoi_ke_hoach: f.so_buoi_ke_hoach ? Number(f.so_buoi_ke_hoach) : null,
     don_gia: Number(f.don_gia),
+    tinh_theo: f.tinh_theo,
+    ...(Number(f.tiet_moi_buoi) > 0 ? { tiet_moi_buoi: Number(f.tiet_moi_buoi) } : {}),
     lich_phan_cong: chuoiHoacNull(f.lich_phan_cong),
     ngay_bat_dau: f.ngay_bat_dau || null,
     ngay_ket_thuc: f.ngay_ket_thuc || null,
@@ -194,17 +202,22 @@ function ChiTietLop({ id }: { id: number | null }) {
   if (!laMoi && (error || !lop)) return <BaoLoiTai loi={error ?? new Error('Không tìm thấy lớp')} />;
   if (!form) return <DangTai />;
 
-  const tietMoiBuoi = caiDat?.tiet_moi_buoi || 5;
+  const tietMoiBuoi = Number(form.tiet_moi_buoi) || caiDat?.tiet_moi_buoi || 5;
   const doi = (k: keyof FormLop, v: string) => {
     daSua.current.add(k);
     const moi = { ...form, [k]: v };
     // Nhập số tiết thì tự quy ra số buổi kế hoạch (làm tròn lên), vẫn sửa tay được
     if (k === 'so_tiet' && Number(v) > 0) moi.so_buoi_ke_hoach = String(Math.ceil(Number(v) / tietMoiBuoi));
+    if (k === 'tiet_moi_buoi' && Number(v) > 0 && Number(form.so_tiet) > 0)
+      moi.so_buoi_ke_hoach = String(Math.ceil(Number(form.so_tiet) / Number(v)));
     // Lớp mới: chọn trường thì gợi ý đơn giá, địa điểm theo lớp gần nhất của trường đó
     if (laMoi && k === 'truong_id' && v) {
       const ganNhat = dsLop?.filter((l) => l.truong_id === Number(v)).at(-1);
       if (ganNhat) {
-        if (!form.don_gia) moi.don_gia = String(ganNhat.don_gia);
+        if (!form.don_gia) {
+          moi.don_gia = String(ganNhat.don_gia);
+          moi.tinh_theo = ganNhat.tinh_theo;
+        }
         if (!form.dia_diem_id && ganNhat.dia_diem_id) moi.dia_diem_id = String(ganNhat.dia_diem_id);
       }
     }
@@ -320,7 +333,7 @@ function ChiTietLop({ id }: { id: number | null }) {
               goiY={
                 Number(form.so_tiet) > 0
                   ? `≈ ${Math.ceil(Number(form.so_tiet) / tietMoiBuoi)} buổi (${tietMoiBuoi} tiết / buổi)`
-                  : `${tietMoiBuoi} tiết / buổi (đổi trong Cài đặt)`
+                  : `${tietMoiBuoi} tiết / buổi`
               }
             >
               <input
@@ -343,10 +356,36 @@ function ChiTietLop({ id }: { id: number | null }) {
                 onChange={(e) => doi('so_buoi_ke_hoach', e.target.value)}
               />
             </O>
+            <O nhan="Số tiết một buổi" id="tiet-moi-buoi" goiY={form.tiet_moi_buoi ? undefined : 'Mặc định theo Cài đặt'}>
+              <input
+                id="tiet-moi-buoi"
+                type="number"
+                min={1}
+                max={20}
+                className="o-nhap"
+                placeholder={String(caiDat?.tiet_moi_buoi ?? 5)}
+                value={form.tiet_moi_buoi}
+                onChange={(e) => doi('tiet_moi_buoi', e.target.value)}
+              />
+            </O>
+            <O nhan="Tính tiền theo" id="tinh-theo">
+              <select id="tinh-theo" className="o-nhap" value={form.tinh_theo} onChange={(e) => doi('tinh_theo', e.target.value)}>
+                <option value="buoi">Buổi</option>
+                <option value="tiet">Tiết</option>
+              </select>
+            </O>
             <O
-              nhan="Đơn giá (nghìn đồng / buổi)"
+              nhan={`Đơn giá (nghìn đồng / ${donViGia(form)})`}
               id="don-gia"
-              goiY={form.don_gia ? `= ${dinhDangTien(Number(form.don_gia) || 0)} / buổi` : 'VD: 400 = 400.000 đ'}
+              goiY={
+                !form.don_gia
+                  ? form.tinh_theo === 'tiet'
+                    ? 'VD: 80 = 80.000 đ / tiết'
+                    : 'VD: 400 = 400.000 đ'
+                  : form.tinh_theo === 'tiet'
+                    ? `= ${dinhDangTien(Number(form.don_gia) || 0)} / tiết → ${dinhDangTien((Number(form.don_gia) || 0) * tietMoiBuoi)} / buổi`
+                    : `= ${dinhDangTien(Number(form.don_gia) || 0)} / buổi`
+              }
             >
               <input
                 id="don-gia"
@@ -449,6 +488,14 @@ function ChiTietLop({ id }: { id: number | null }) {
                 <div className="text-right tabular-nums">{dinhDangTien(lop.tienDc)}</div>
                 <div className="font-medium">Tổng</div>
                 <div className="text-right font-semibold tabular-nums text-blue-700">{dinhDangTien(lop.tong)}</div>
+                {lop.thue_truong > 0 && (
+                  <>
+                    <div className="text-slate-500">Thuế {lop.thue_truong}% (trên tiền dạy)</div>
+                    <div className="text-right tabular-nums">{dinhDangTien(lop.tienThue)}</div>
+                    <div className="font-medium">Kể cả thuế</div>
+                    <div className="text-right font-semibold tabular-nums">{dinhDangTien(lop.tongCoThue)}</div>
+                  </>
+                )}
               </div>
               {lop.buoi.length > 0 && (
                 <div className="text-xs text-slate-500">

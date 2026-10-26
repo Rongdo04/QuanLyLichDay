@@ -28,6 +28,8 @@ export interface SheetNhap {
   so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number | null;
+  tinh_theo: 'buoi' | 'tiet';
+  tiet_moi_buoi: number | null;   // chỉ có khi công thức theo tiết
   lich_phan_cong: string | null;
   dia_diem_goi_y: string | null;      // giá trị cột E phổ biến nhất (tên địa điểm)
   dia_diem_ten_day_du: string | null; // từ dòng "Địa điểm: …"
@@ -102,11 +104,20 @@ export function docNgay(v: ExcelJS.CellValue): string | null {
   return `${y}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
 }
 
-// Đơn giá từ công thức "=COUNTA(C5:D14)*380"
-export function docDonGia(congThuc: string | undefined | null): number | null {
+// Đơn giá từ công thức "=COUNTA(C5:D14)*380" (theo buổi) hoặc "=COUNTA(C5:D14)*5*80" (5 tiết / buổi × 80 / tiết)
+export function docCongThucGia(
+  congThuc: string | undefined | null,
+): { don_gia: number; tinh_theo: 'buoi' | 'tiet'; tiet_moi_buoi: number | null } | null {
   if (!congThuc) return null;
-  const m = /\*\s*(\d+)\s*$/.exec(congThuc.trim());
-  return m ? Number(m[1]) : null;
+  const t = congThuc.trim();
+  const tiet = /\*\s*(\d+)\s*\*\s*(\d+)\s*$/.exec(t);
+  if (tiet) return { don_gia: Number(tiet[2]), tinh_theo: 'tiet', tiet_moi_buoi: Number(tiet[1]) };
+  const m = /\*\s*(\d+)\s*$/.exec(t);
+  return m ? { don_gia: Number(m[1]), tinh_theo: 'buoi', tiet_moi_buoi: null } : null;
+}
+
+export function docDonGia(congThuc: string | undefined | null): number | null {
+  return docCongThucGia(congThuc)?.don_gia ?? null;
 }
 
 // "TRƯỜNG GTCT 2026-2027" → "GTCT"; "TRƯỜNG TCHN- 2026-2027" → "TCHN"
@@ -184,10 +195,15 @@ export function phanTichSheet(ws: ExcelJS.Worksheet): SheetNhap | { loi: string 
 
   // 3. Đơn giá: công thức ở cột G (thường là G5)
   let donGia: number | null = null;
+  let tinhTheo: 'buoi' | 'tiet' = 'buoi';
+  let tietMoiBuoi: number | null = null;
   for (let r = dongDau; r <= Math.max(dongCuoi, dongDau); r++) {
     const o = ws.getCell(r, 7);
-    donGia = docDonGia(o.formula);
-    if (donGia) break;
+    const gia = docCongThucGia(o.formula);
+    if (gia?.don_gia) {
+      ({ don_gia: donGia, tinh_theo: tinhTheo, tiet_moi_buoi: tietMoiBuoi } = gia);
+      break;
+    }
     // Không có công thức: thử chia kết quả cho số buổi
     const g = giaTriO(o.value);
     if (typeof g === 'number' && g > 0 && soBuoi > 0 && Number.isInteger(g / soBuoi)) {
@@ -213,7 +229,7 @@ export function phanTichSheet(ws: ExcelJS.Worksheet): SheetNhap | { loi: string 
       const kh = RE_KE_HOACH.exec(m[1]);
       if (kh && (kh[1] || kh[2])) {
         soTiet = kh[1] ? Number(kh[1]) : null;
-        soBuoiKeHoach = kh[2] ? Number(kh[2]) : soTiet ? Math.ceil(soTiet / layCaiDat().tiet_moi_buoi) : null;
+        soBuoiKeHoach = kh[2] ? Number(kh[2]) : soTiet ? Math.ceil(soTiet / (tietMoiBuoi ?? layCaiDat().tiet_moi_buoi)) : null;
         hocPhan = m[1].slice(0, kh.index).trim() || null;
       } else hocPhan = m[1].trim() || null;
     } else if ((m = RE_LOP.exec(t))) {
@@ -262,6 +278,8 @@ export function phanTichSheet(ws: ExcelJS.Worksheet): SheetNhap | { loi: string 
     so_tiet: soTiet,
     so_buoi_ke_hoach: soBuoiKeHoach,
     don_gia: donGia,
+    tinh_theo: tinhTheo,
+    tiet_moi_buoi: tietMoiBuoi,
     lich_phan_cong: lichPhanCong,
     dia_diem_goi_y: diaDiemGoiY,
     dia_diem_ten_day_du: tenDayDu,
@@ -311,6 +329,8 @@ export interface SheetXacNhan {
   so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
+  tinh_theo?: 'buoi' | 'tiet';
+  tiet_moi_buoi?: number | null;
   lich_phan_cong: string | null;
   trang_thai: 'dang_day' | 'hoan_thanh' | 'tam_dung';
   dia_diem_id: number | null;
@@ -369,6 +389,8 @@ export function xacNhanNhap(d: DuLieuXacNhan) {
         so_tiet: s.so_tiet,
         so_buoi_ke_hoach: s.so_buoi_ke_hoach,
         don_gia: s.don_gia,
+        tinh_theo: s.tinh_theo ?? 'buoi',
+        ...(s.tiet_moi_buoi ? { tiet_moi_buoi: s.tiet_moi_buoi } : {}),
         lich_phan_cong: s.lich_phan_cong,
         ngay_bat_dau: dsBuoi[0]?.ngay ?? null,
         ngay_ket_thuc: dsBuoi.at(-1)?.ngay ?? null,

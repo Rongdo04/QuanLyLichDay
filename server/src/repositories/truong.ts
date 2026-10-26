@@ -8,6 +8,7 @@ export interface Truong {
   ten: string;
   ghi_chu: string | null;
   da_an: number;
+  thue: number; // phần trăm thuế cộng thêm trên tiền dạy, 0 = không có
 }
 
 export function dsTruong(): (Truong & { so_lop: number })[] {

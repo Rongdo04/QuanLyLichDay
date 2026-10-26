@@ -107,7 +107,12 @@ export function TrangTongQuan() {
             <TheSoLieu nhan="Số buổi đã dạy" giaTri={dinhDangSo(tk.tong.soBuoi)} phu={`${soLop} lớp có lịch trong kỳ`} />
             <TheSoLieu nhan="Tiền dạy" giaTri={dinhDangTien(tk.tong.tienDay)} />
             <TheSoLieu nhan="Tiền di chuyển" giaTri={dinhDangTien(tk.tong.tienDc)} />
-            <TheSoLieu nhan="Tổng tiền" giaTri={dinhDangTien(tk.tong.tong)} noiBat />
+            <TheSoLieu
+              nhan="Tổng tiền (nhận về)"
+              giaTri={dinhDangTien(tk.tong.tong)}
+              phu={tk.tong.tienThue ? `Kể cả thuế: ${dinhDangTien(tk.tong.tongCoThue)}` : undefined}
+              noiBat
+            />
           </div>
           <BangTheoTruong tk={tk} />
         </>
@@ -150,6 +155,7 @@ function BangTheoTruong({ tk }: { tk: ThongKe }) {
               <th className="w-36 text-right">Tiền dạy</th>
               <th className="w-32 text-right">Tiền DC</th>
               <th className="w-36 text-right">Tổng</th>
+              <th className="w-36 text-right">Kể cả thuế</th>
             </tr>
           </thead>
           <tbody>
@@ -164,6 +170,7 @@ function BangTheoTruong({ tk }: { tk: ThongKe }) {
               <td className="px-3 py-2 text-right tabular-nums">{dinhDangTien(tk.tong.tienDay)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{dinhDangTien(tk.tong.tienDc)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-blue-700">{dinhDangTien(tk.tong.tong)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{dinhDangTien(tk.tong.tongCoThue)}</td>
             </tr>
           </tfoot>
         </table>
@@ -181,12 +188,15 @@ function FragmentTruong({ t, mo, onDoi }: { t: TruongTK; mo: boolean; onDoi: () 
         <td className="font-medium">
           <span className="mr-1.5 inline-block w-3 text-slate-400">{mo ? '▾' : '▸'}</span>
           {t.ma} <span className="font-normal text-slate-500">— {t.ten}</span>
-          <span className="ml-1 text-xs font-normal text-slate-400">({t.lop.length} lớp)</span>
+          <span className="ml-1 text-xs font-normal text-slate-400">
+            ({t.lop.length} lớp{t.thue ? `, thuế ${t.thue}%` : ''})
+          </span>
         </td>
         <td className="text-right tabular-nums">{t.soBuoi}</td>
         <td className="text-right tabular-nums">{dinhDangTien(t.tienDay)}</td>
         <td className="text-right tabular-nums">{dinhDangTien(t.tienDc)}</td>
         <td className="text-right font-medium tabular-nums">{dinhDangTien(t.tong)}</td>
+        <td className="text-right tabular-nums">{t.tienThue ? dinhDangTien(t.tongCoThue) : '—'}</td>
       </tr>
       {mo &&
         t.lop.map((l) => (
@@ -201,6 +211,7 @@ function FragmentTruong({ t, mo, onDoi }: { t: TruongTK; mo: boolean; onDoi: () 
             <td className="text-right tabular-nums">{dinhDangTien(l.tienDay)}</td>
             <td className="text-right tabular-nums">{dinhDangTien(l.tienDc)}</td>
             <td className="text-right tabular-nums">{dinhDangTien(l.tong)}</td>
+            <td className="text-right tabular-nums">{l.tienThue ? dinhDangTien(l.tongCoThue) : '—'}</td>
           </tr>
         ))}
     </>

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { taoApp } from '../src/app.js';
 import { datDb, moDb } from '../src/db/connection.js';
 
-const app = taoApp();
+const app = taoApp({ boQuaDangNhap: true });
 const api = () => request(app);
 
 // Lớp mẫu: AutoCad_TT ở trường HN (id 4), địa điểm Thạch Thất (id 1)
@@ -221,13 +221,14 @@ describe('API thống kê', () => {
   it('tổng hợp theo trường và lớp trong kỳ', async () => {
     await chuanBi();
     const { body } = await api().get('/api/thong-ke?tu=2026-10-01&den=2026-10-31').expect(200);
-    expect(body.tong).toEqual({ soBuoi: 3, tienDay: 400 + 700, tienDc: 66, tong: 1166 });
+    // Mọi trường thuế 10% trên tiền dạy: HN 400 → 40, GTVT 700 → 70 (không tính trên tiền DC)
+    expect(body.tong).toEqual({ soBuoi: 3, tienDay: 400 + 700, tienDc: 66, tong: 1166, tienThue: 110, tongCoThue: 1276 });
     expect(body.truong.map((t: { ma: string }) => t.ma)).toEqual(['GTVT', 'HN']);
     const hn = body.truong.find((t: { ma: string }) => t.ma === 'HN');
     expect(hn.lop[0]).toMatchObject({ ten_sheet: 'AutoCad_TT', soNgay: 2, soBuoi: 1, tong: 466 });
 
     const loc = await api().get('/api/thong-ke?truongId=4').expect(200);
-    expect(loc.body.tong).toEqual({ soBuoi: 3, tienDay: 1200, tienDc: 132, tong: 1332 });
+    expect(loc.body.tong).toEqual({ soBuoi: 3, tienDay: 1200, tienDc: 132, tong: 1332, tienThue: 120, tongCoThue: 1452 });
   });
 
   it('theo tháng × trường', async () => {
@@ -236,7 +237,8 @@ describe('API thống kê', () => {
     expect(body.namHoc).toBe('2026-2027');
     expect(body.thang).toHaveLength(12);
     expect(body.thang[0]).toMatchObject({ nhan: '09/2026', tong: { tong: 866 } });
-    expect(body.thang[1].theoTruong['2']).toEqual({ soBuoi: 2, tienDay: 700, tienDc: 0, tong: 700 });
+    expect(body.thang[1].theoTruong['2']).toEqual({ soBuoi: 2, tienDay: 700, tienDc: 0, tong: 700, tienThue: 70, tongCoThue: 770 });
+    expect(body.thang[1].theoTruong['4']).toMatchObject({ tienThue: 40, tongCoThue: 506 });
     expect(body.thang[1].theoTruong['4'].tong).toBe(466);
     expect(body.tong.tong).toBe(866 + 700 + 466);
   });
