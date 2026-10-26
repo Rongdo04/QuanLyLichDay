@@ -116,6 +116,14 @@ describe('xuatExcel', () => {
     expect(h5.result).toBe(6660);
     expect(ws.getCell('G5').numFmt).toBe('#,##0');
 
+    // Trường HN có thuế 10%: giữ số nhận về ở G5/H5, thêm dòng thuế và tổng kể cả thuế
+    expect(ws.getCell('G7').value).toBe('Thuế 10%');
+    const h7 = ws.getCell('H7').value as ExcelJS.CellFormulaValue;
+    expect(h7.formula).toBe('ROUND(G5*10/100,0)');
+    expect(h7.result).toBe(600);
+    expect(ws.getCell('G8').value).toBe('Kể cả thuế');
+    expect((ws.getCell('H8').value as ExcelJS.CellFormulaValue).result).toBe(7260);
+
     // Khối thông tin cột K
     expect(ws.getCell('K4').value).toBe('Địa điểm: Trung tâm GDNN-GDTX Thạch Thất - Cơ sở 2');
     expect(ws.getCell('K5').value).toBe('Lớp: CT.10T1 (Lớp văn hóa: 11A6)');
@@ -198,6 +206,19 @@ describe('xuatExcel', () => {
     expect(tinHoc).toMatchObject({ hoc_phan: 'Tin học', so_tiet: 45, so_buoi_ke_hoach: 12 });
   });
 
+  it('tính theo tiết: công thức nhân số tiết / buổi, nhập lại giữ cách tính', async () => {
+    const lop = taoLopAutoCad();
+    suaLop(lop.id, { tinh_theo: 'tiet', tiet_moi_buoi: 5, don_gia: 80 });
+    const { buffer } = await xuatFileTruong(4);
+    const wb = await docLai(buffer);
+    const g5 = wb.getWorksheet('AutoCad_TT')!.getCell('G5').value as ExcelJS.CellFormulaValue;
+    expect(g5.formula).toBe('COUNTA(C5:D15)*5*80');
+    expect(g5.result).toBe(6000);
+
+    const kq = await phanTichFile(buffer, 'x.xlsx');
+    expect(kq.sheets[0]).toMatchObject({ don_gia: 80, tinh_theo: 'tiet', tiet_moi_buoi: 5 });
+  });
+
   it('tên file khi có khoảng ngày', () => {
     expect(tenFileTruong('GTCT', '2026-2027', '2026-10-01', '2026-10-31')).toBe(
       'THỐNG KÊ GIẢNG DẠY TRƯỜNG GTCT_2026-2027_01.10.2026-31.10.2026.xlsx',
@@ -206,7 +227,7 @@ describe('xuatExcel', () => {
 
   it('API trả file với tên tiếng Việt mã hóa UTF-8', async () => {
     const lop = taoLopAutoCad();
-    const r = await request(taoApp())
+    const r = await request(taoApp({ boQuaDangNhap: true }))
       .get(`/api/xuat/truong/4?lopIds=${lop.id}`)
       .buffer(true)
       .parse((res, cb) => {
@@ -222,7 +243,7 @@ describe('xuatExcel', () => {
     const wb = await docLai(r.body as Buffer);
     expect(wb.worksheets).toHaveLength(1);
 
-    const loi = await request(taoApp()).get('/api/xuat/truong/1').expect(400);
+    const loi = await request(taoApp({ boQuaDangNhap: true })).get('/api/xuat/truong/1').expect(400);
     expect(loi.body.loi).toBe('Không có lớp nào để xuất');
   });
 
@@ -250,10 +271,10 @@ describe('xuatTongHop', () => {
     const ws = wb.getWorksheet('Tổng hợp')!;
     expect(ws.getCell('A1').value).toBe('Đơn vị: nghìn đồng');
     expect(ws.getRow(4).values).toEqual([
-      undefined, 'Trường', 'Lớp', 'Học phần', 'Số buổi KH', 'Đã dạy', 'Đơn giá', 'Tiền dạy', 'Tiền DC', 'Tổng',
+      undefined, 'Trường', 'Lớp', 'Học phần', 'Số buổi KH', 'Đã dạy', 'Đơn giá', 'Tiền dạy', 'Tiền DC', 'Tổng', 'Thuế', 'Kể cả thuế',
     ]);
     expect(ws.getRow(5).values).toEqual([
-      undefined, 'Trường Trung cấp Hà Nội', 'AutoCad_TT', 'Vẽ kỹ thuật và Autocad', 15, 15, 400, 6000, 660, 6660,
+      undefined, 'Trường Trung cấp Hà Nội', 'AutoCad_TT', 'Vẽ kỹ thuật và Autocad', 15, 15, 400, 6000, 660, 6660, 600, 7260,
     ]);
     expect(ws.getCell('A6').value).toBe('Tổng cộng');
     expect((ws.getCell('I6').value as ExcelJS.CellFormulaValue).result).toBe(6660);

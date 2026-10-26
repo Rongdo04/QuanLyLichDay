@@ -8,6 +8,7 @@ const schemaTruong = z.object({
   ten: z.string().trim().min(1).max(200),
   ghi_chu: zChuoiTuyChon,
   da_an: zCo.default(0),
+  thue: z.number().int().min(0).max(100).default(10),
 });
 
 export const truongRouter = Router();

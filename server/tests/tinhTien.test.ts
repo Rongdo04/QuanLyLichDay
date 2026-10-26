@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tinhLop, tienDcNgay, congKetQua } from '../src/services/tinhTien.js';
+import { tinhLop, tienDcNgay, congKetQua, giaMotBuoi, tienThue } from '../src/services/tinhTien.js';
 
 // Dữ liệu thật sheet AutoCad_TT(done): chiều T4, cả ngày T7
 const autoCad = [
@@ -17,6 +17,16 @@ describe('tinhTien', () => {
     expect(kq.tienDc).toBe(660);
     expect(kq.tong).toBe(6660);
     expect(kq.tienDo).toBe(1);
+  });
+
+  it('tính theo tiết: 15 buổi × 5 tiết × 80 = 6.000', () => {
+    const kq = tinhLop({ don_gia: 80, tinh_theo: 'tiet', tiet_moi_buoi: 5 }, 66, autoCad);
+    expect(kq.soBuoi).toBe(15);
+    expect(kq.soTiet).toBe(75);
+    expect(kq.tienDay).toBe(6000);
+    expect(kq.tong).toBe(6660);
+    expect(giaMotBuoi({ don_gia: 80, tinh_theo: 'tiet', tiet_moi_buoi: 4 })).toBe(320);
+    expect(giaMotBuoi({ don_gia: 400, tinh_theo: 'buoi', tiet_moi_buoi: 4 })).toBe(400);
   });
 
   it('ngày chưa dạy không tính tiền DC', () => {
@@ -43,6 +53,16 @@ describe('tinhTien', () => {
 
   it('cộng dồn kết quả', () => {
     const a = tinhLop({ don_gia: 400 }, 66, autoCad);
-    expect(congKetQua([a, a])).toEqual({ soBuoi: 30, tienDay: 12000, tienDc: 1320, tong: 13320 });
+    expect(congKetQua([a, a])).toEqual({ soBuoi: 30, tienDay: 12000, tienDc: 1320, tong: 13320, tienThue: 0, tongCoThue: 13320 });
+  });
+
+  it('thuế trường cộng 10% trên tiền dạy, không tính trên tiền DC', () => {
+    const kq = tinhLop({ don_gia: 400, thue_truong: 10 }, 66, autoCad);
+    expect(kq.tong).toBe(6660);
+    expect(kq.tienThue).toBe(600);
+    expect(kq.tongCoThue).toBe(7260);
+    expect(tienThue(400, 10)).toBe(40);
+    expect(tienThue(355, 10)).toBe(36); // làm tròn đến nghìn đồng
+    expect(tienThue(400, 0)).toBe(0);
   });
 });

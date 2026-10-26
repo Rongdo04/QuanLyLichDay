@@ -20,6 +20,8 @@ const zSheetXacNhan = z.object({
   so_tiet: z.number().int().min(1).max(2000).nullish().transform((v) => v ?? null),
   so_buoi_ke_hoach: z.number().int().min(1).nullish().transform((v) => v ?? null),
   don_gia: z.number().int().min(0),
+  tinh_theo: z.enum(['buoi', 'tiet']).default('buoi'),
+  tiet_moi_buoi: z.number().int().min(1).max(20).nullish().transform((v) => v ?? null),
   lich_phan_cong: zChuoiTuyChon,
   trang_thai: zTrangThai.default('dang_day'),
   dia_diem_id: zId.nullish().transform((v) => v ?? null),

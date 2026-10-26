@@ -19,6 +19,11 @@ export function dongThongBao(id: number) {
   phat();
 }
 
+export function xoaHetThongBao() {
+  ds = [];
+  phat();
+}
+
 export function thongBao(noiDung: string, loai: LoaiThongBao = 'thanh-cong') {
   const id = ++dem;
   ds = [...ds.slice(-4), { id, loai, noiDung }];

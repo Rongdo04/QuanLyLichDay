@@ -5,9 +5,9 @@ import { api, khoa } from '../api';
 import type { Buoi, BuoiDayDu, LopThongKe } from '../api/types';
 import { BaoLoiTai, DangTai, Modal, ThanhTienDo, TieuDeTrang, TrongRong } from '../components/ChungUI';
 import { TrinhSinhLich } from '../components/TrinhSinhLich';
-import { congNgay, dinhDangNgay, dinhDangTien, homNay, NHAN_DU_KIEN } from '../lib/format';
+import { congNgay, dinhDangNgay, dinhDangTien, donViGia, homNay, NHAN_DU_KIEN } from '../lib/format';
 import { useDsLop, useSuaBuoi, useThemBuoi, useXoaBuoi } from '../lib/hooks';
-import { soBuoiTrongNgay, thuCuaNgay, tienDcNgay } from '../lib/nghiepVu';
+import { giaMotBuoi, soBuoiTrongNgay, thuCuaNgay, tienDcNgay } from '../lib/nghiepVu';
 import { coChieu, coSang, duKienCuaBuoi } from '../lib/duKien';
 import { thongBao } from '../lib/thongBao';
 
@@ -169,7 +169,7 @@ function ChamTheoLop({ lopId, dsLop, onChonLop }: { lopId: number; dsLop: LopTho
                 {lop.lop_van_hoa && ` (văn hóa ${lop.lop_van_hoa})`}
               </div>
               <div className="mt-1 text-sm text-slate-500">
-                {lop.truong_ten} · Đơn giá {dinhDangTien(lop.don_gia)}/buổi
+                {lop.truong_ten} · Đơn giá {dinhDangTien(lop.don_gia)}/{donViGia(lop)}
                 {lop.dia_diem_ten
                   ? ` · ${lop.dia_diem_ten} (DC ${dinhDangTien(lop.tien_dc_dia_diem ?? 0)}/ngày)`
                   : ' · Không có tiền DC'}
@@ -179,9 +179,18 @@ function ChamTheoLop({ lopId, dsLop, onChonLop }: { lopId: number; dsLop: LopTho
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4 text-right">
-              <SoLieu nhan="Tiền dạy" giaTri={dinhDangTien(lop.tienDay)} phu={`${lop.soBuoi} buổi`} />
+              <SoLieu
+                nhan="Tiền dạy"
+                giaTri={dinhDangTien(lop.tienDay)}
+                phu={lop.tinh_theo === 'tiet' ? `${lop.soBuoi} buổi · ${lop.soTiet} tiết` : `${lop.soBuoi} buổi`}
+              />
               <SoLieu nhan="Tiền DC" giaTri={dinhDangTien(lop.tienDc)} phu={`${lop.soNgayDay} ngày`} />
-              <SoLieu nhan="Tổng" giaTri={dinhDangTien(lop.tong)} noiBat />
+              <SoLieu
+                nhan="Tổng"
+                giaTri={dinhDangTien(lop.tong)}
+                phu={lop.thue_truong ? `Kể cả thuế ${lop.thue_truong}%: ${dinhDangTien(lop.tongCoThue)}` : undefined}
+                noiBat
+              />
             </div>
           </div>
 
@@ -220,7 +229,10 @@ function ChamTheoLop({ lopId, dsLop, onChonLop }: { lopId: number; dsLop: LopTho
                     <td className="px-3 py-2 text-center tabular-nums">{lop.buoi.filter((b) => b.sang).length}</td>
                     <td className="px-3 py-2 text-center tabular-nums">{lop.buoi.filter((b) => b.chieu).length}</td>
                     <td className="px-3 py-2 text-slate-600">
-                      {lop.soBuoi} buổi × {dinhDangTien(lop.don_gia)} = {dinhDangTien(lop.tienDay)}
+                      {lop.tinh_theo === 'tiet'
+                        ? `${lop.soBuoi} buổi = ${lop.soTiet} tiết × ${dinhDangTien(lop.don_gia)}`
+                        : `${lop.soBuoi} buổi × ${dinhDangTien(lop.don_gia)}`}{' '}
+                      = {dinhDangTien(lop.tienDay)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{dinhDangTien(lop.tienDc)}</td>
                     <td />
@@ -418,7 +430,7 @@ function ChamTheoNgay({ ngay, dsLop, onDoiNgay }: { ngay: string; dsLop: LopThon
     (a, b) => {
       const n = soBuoiTrongNgay(b);
       const dc = tienDcNgay(b, b.tien_dc_dia_diem);
-      return { soBuoi: a.soBuoi + n, tienDay: a.tienDay + n * b.don_gia, tienDc: a.tienDc + dc };
+      return { soBuoi: a.soBuoi + n, tienDay: a.tienDay + n * giaMotBuoi(b), tienDc: a.tienDc + dc };
     },
     { soBuoi: 0, tienDay: 0, tienDc: 0 },
   );

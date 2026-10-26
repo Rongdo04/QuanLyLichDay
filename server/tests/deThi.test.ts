@@ -24,7 +24,7 @@ import { dienMau, kiemTraMau } from '../src/services/mauWord.js';
 import { phanTichVanBan } from '../src/services/phanTichCauHoi.js';
 import { tenFileDeThi } from '../src/services/sinhDe.js';
 
-const app = taoApp();
+const app = taoApp({ boQuaDangNhap: true });
 const api = () => request(app);
 
 beforeEach(() => {

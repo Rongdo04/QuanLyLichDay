@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { dsBuoi, type BuoiDayDu } from '../repositories/buoi.js';
 import { dsLopThuan } from '../repositories/lop.js';
 import { dsTruong } from '../repositories/truong.js';
-import { congKetQua, soBuoiTrongNgay, tienDcNgay, tinhLop } from './tinhTien.js';
+import { congKetQua, giaMotBuoi, soBuoiTrongNgay, tienDcNgay, tienThue, tinhLop } from './tinhTien.js';
 
 export interface LocThongKe {
   tu?: string;
@@ -31,13 +31,15 @@ export function thongKe(loc: LocThongKe) {
           hoc_phan: l.hoc_phan,
           ma_lop: l.ma_lop,
           don_gia: l.don_gia,
+          tinh_theo: l.tinh_theo,
+          tiet_moi_buoi: l.tiet_moi_buoi,
           so_buoi_ke_hoach: l.so_buoi_ke_hoach,
           trang_thai: l.trang_thai,
           dia_diem_ten: l.dia_diem_ten,
           soNgay: theoLop.get(l.id)!.length,
           ...tinhLop(l, l.tien_dc_dia_diem, theoLop.get(l.id)!),
         }));
-      return { id: t.id, ma: t.ma, ten: t.ten, ...congKetQua(lop), lop };
+      return { id: t.id, ma: t.ma, ten: t.ten, thue: t.thue, ...congKetQua(lop), lop };
     })
     .filter((t) => t.lop.length > 0);
 
@@ -62,7 +64,7 @@ export function thongKeTheoThang(tu: string, den: string) {
   const buoi = dsBuoi({ tu, den });
   const dsT = dsTruong();
 
-  const rong = () => ({ soBuoi: 0, tienDay: 0, tienDc: 0, tong: 0 });
+  const rong = () => ({ soBuoi: 0, tienDay: 0, tienDc: 0, tong: 0, tienThue: 0, tongCoThue: 0 });
   const thang: { thang: string; nhan: string; theoTruong: Record<number, ReturnType<typeof rong>>; tong: ReturnType<typeof rong> }[] = [];
   const thangCuoi = dayjs(den).startOf('month');
   for (let d = dayjs(tu).startOf('month'); !d.isAfter(thangCuoi); d = d.add(1, 'month')) {
@@ -74,12 +76,15 @@ export function thongKeTheoThang(tu: string, den: string) {
     const dong = thang[viTri.get(b.ngay.slice(0, 7))!];
     const n = soBuoiTrongNgay(b);
     const dc = tienDcNgay(b, b.tien_dc_dia_diem);
-    const tienDay = n * b.don_gia;
+    const tienDay = n * giaMotBuoi(b);
+    const thue = tienThue(tienDay, b.thue_truong);
     for (const o of [(dong.theoTruong[b.truong_id] ??= rong()), dong.tong]) {
       o.soBuoi += n;
       o.tienDay += tienDay;
       o.tienDc += dc;
       o.tong += tienDay + dc;
+      o.tienThue += thue;
+      o.tongCoThue += tienDay + dc + thue;
     }
   }
 

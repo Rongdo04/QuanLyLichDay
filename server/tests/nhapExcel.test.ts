@@ -7,6 +7,7 @@ import { taoApp } from '../src/app.js';
 import { datDb, moDb } from '../src/db/connection.js';
 import { chiTietLop, dsLop } from '../src/repositories/lop.js';
 import {
+  docCongThucGia,
   docDonGia,
   goiYTruongTuTenFile,
   phanTichFile,
@@ -46,6 +47,8 @@ function xacNhanTuPhanTich(kq: KetQuaPhanTich, truongId: number, xuLy: 'bo_qua' 
       so_tiet: s.so_tiet,
       so_buoi_ke_hoach: s.so_buoi_ke_hoach,
       don_gia: s.don_gia!,
+      tinh_theo: s.tinh_theo,
+      tiet_moi_buoi: s.tiet_moi_buoi,
       lich_phan_cong: s.lich_phan_cong,
       trang_thai: s.trang_thai,
       dia_diem_id: s.dia_diem_id,
@@ -66,6 +69,8 @@ describe('nhapExcel - hàm nhỏ', () => {
     expect(docDonGia('COUNTA(C5:D110)*450')).toBe(450);
     expect(docDonGia('=COUNTA(C5:D14)* 380 ')).toBe(380);
     expect(docDonGia('SUM(F5:F67,G5)')).toBeNull();
+    expect(docCongThucGia('COUNTA(C5:D14)*380')).toEqual({ don_gia: 380, tinh_theo: 'buoi', tiet_moi_buoi: null });
+    expect(docCongThucGia('=COUNTA(C5:D14)*5*80')).toEqual({ don_gia: 80, tinh_theo: 'tiet', tiet_moi_buoi: 5 });
   });
 
   it('gợi ý trường từ tên file', () => {
@@ -180,7 +185,7 @@ describe.skipIf(!coFile)('nhapExcel - 4 file thật', () => {
   });
 
   it('API: tải file lên (tên file tiếng Việt), xem trước rồi xác nhận', async () => {
-    const app = taoApp();
+    const app = taoApp({ boQuaDangNhap: true });
     const buffer = fs.readFileSync(FILE.DANGANH);
     const ten = path.basename(FILE.DANGANH);
 
@@ -218,7 +223,7 @@ describe.skipIf(!coFile)('nhapExcel - 4 file thật', () => {
 
 describe('nhapExcel - lỗi', () => {
   it('file không phải xlsx', async () => {
-    const app = taoApp();
+    const app = taoApp({ boQuaDangNhap: true });
     const r = await request(app).post('/api/nhap/xem-truoc').attach('file', Buffer.from('abc'), 'a.xls').expect(400);
     expect(r.body.loi).toContain('.xls');
     const r2 = await request(app).post('/api/nhap/xem-truoc').attach('file', Buffer.from('abc'), 'a.xlsx').expect(400);

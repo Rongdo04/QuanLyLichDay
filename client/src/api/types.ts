@@ -3,12 +3,28 @@
 export type TrangThai = 'dang_day' | 'hoan_thanh' | 'tam_dung';
 export type DuKien = 'S' | 'C' | 'SC';
 
+export interface NguoiDung {
+  id: number;
+  ten_dang_nhap: string;
+  ho_ten: string;
+  email: string | null;
+  la_quan_tri: number;
+  bi_khoa: number;
+  tao_luc: string;
+}
+
+export interface TrangThaiDangNhap {
+  nguoi_dung: NguoiDung | null;
+  can_khoi_tao: boolean; // chưa có tài khoản nào
+}
+
 export interface Truong {
   id: number;
   ma: string;
   ten: string;
   ghi_chu: string | null;
   da_an: number;
+  thue: number; // % thuế cộng thêm trên tiền dạy
   so_lop: number;
 }
 
@@ -24,10 +40,15 @@ export interface TongTien {
   soBuoi: number;
   tienDay: number;
   tienDc: number;
-  tong: number;
+  tong: number;       // tiền nhận về
+  tienThue: number;   // thuế trường cộng thêm trên tiền dạy
+  tongCoThue: number; // tong + tienThue
 }
 
+export type TinhTheo = 'buoi' | 'tiet';
+
 export interface SoLieuLop extends TongTien {
+  soTiet: number;
   soNgayDay: number;
   tienDo: number | null;
 }
@@ -43,6 +64,8 @@ export interface Lop {
   so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
+  tinh_theo: TinhTheo;
+  tiet_moi_buoi: number;
   lich_phan_cong: string | null;
   lich_tuan: string | null; // JSON {"4":"C","7":"SC"}
   ngay_bat_dau: string | null;
@@ -52,6 +75,7 @@ export interface Lop {
   tao_luc: string;
   truong_ma: string;
   truong_ten: string;
+  thue_truong: number;
   dia_diem_ten: string | null;
   dia_diem_ten_day_du: string | null;
   tien_dc_dia_diem: number | null;
@@ -76,8 +100,11 @@ export interface BuoiDayDu extends Buoi {
   ten_sheet: string;
   hoc_phan: string;
   don_gia: number;
+  tinh_theo: TinhTheo;
+  tiet_moi_buoi: number;
   truong_id: number;
   truong_ma: string;
+  thue_truong: number;
   lich_tuan: string | null;
   lich_phan_cong: string | null;
   dia_diem_ten: string | null;
@@ -96,6 +123,8 @@ export interface DuLieuLop {
   so_tiet?: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
+  tinh_theo?: TinhTheo;
+  tiet_moi_buoi?: number;
   lich_phan_cong: string | null;
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
@@ -152,6 +181,8 @@ export interface LopTrongThongKe extends SoLieuLop {
   hoc_phan: string;
   ma_lop: string | null;
   don_gia: number;
+  tinh_theo: TinhTheo;
+  tiet_moi_buoi: number;
   so_buoi_ke_hoach: number | null;
   trang_thai: TrangThai;
   dia_diem_ten: string | null;
@@ -162,7 +193,7 @@ export interface ThongKe {
   tu: string | null;
   den: string | null;
   tong: TongTien;
-  truong: (TongTien & { id: number; ma: string; ten: string; lop: LopTrongThongKe[] })[];
+  truong: (TongTien & { id: number; ma: string; ten: string; thue: number; lop: LopTrongThongKe[] })[];
 }
 
 export interface ThongKeThang {
@@ -198,6 +229,8 @@ export interface SheetNhap {
   so_tiet: number | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number | null;
+  tinh_theo: TinhTheo;
+  tiet_moi_buoi: number | null;
   lich_phan_cong: string | null;
   dia_diem_goi_y: string | null;
   dia_diem_ten_day_du: string | null;
@@ -227,6 +260,8 @@ export interface SheetXacNhan {
   lop_van_hoa: string | null;
   so_buoi_ke_hoach: number | null;
   don_gia: number;
+  tinh_theo?: TinhTheo;
+  tiet_moi_buoi?: number | null;
   lich_phan_cong: string | null;
   trang_thai: TrangThai;
   dia_diem_id: number | null;

@@ -126,7 +126,10 @@ export function themSheetLop(wb: ExcelJS.Workbook, lop: LopDayDu, buoi: Buoi[], 
   const oTienDay = ghiO(
     ws,
     `G${DONG_DAU}`,
-    { formula: `COUNTA(C${DONG_DAU}:D${last})*${lop.don_gia}`, result: kq.tienDay },
+    {
+      formula: `COUNTA(C${DONG_DAU}:D${last})*${lop.tinh_theo === 'tiet' ? `${lop.tiet_moi_buoi}*` : ''}${lop.don_gia}`,
+      result: kq.tienDay,
+    },
     GIUA,
   );
   oTienDay.numFmt = '#,##0';
@@ -137,6 +140,22 @@ export function themSheetLop(wb: ExcelJS.Workbook, lop: LopDayDu, buoi: Buoi[], 
     TRAI,
   );
   oTong.numFmt = '#,##0';
+
+  // Trường có thuế: giữ số nhận về ở trên, thêm dòng thuế (trên tiền dạy) và tổng kể cả thuế
+  if (lop.thue_truong > 0) {
+    const r = DONG_DAU + 2;
+    ghiO(ws, `G${r}`, `Thuế ${lop.thue_truong}%`, TRAI);
+    const oThue = ghiO(
+      ws,
+      `H${r}`,
+      { formula: `ROUND(G${DONG_DAU}*${lop.thue_truong}/100,0)`, result: kq.tienThue },
+      TRAI,
+    );
+    oThue.numFmt = '#,##0';
+    ghiO(ws, `G${r + 1}`, 'Kể cả thuế', TRAI, FONT_DAM);
+    const oCoThue = ghiO(ws, `H${r + 1}`, { formula: `H${DONG_DAU}+H${r}`, result: kq.tongCoThue }, TRAI, FONT_DAM);
+    oCoThue.numFmt = '#,##0';
+  }
 
   // Viền mảnh vùng A1:F{last}
   for (let r = 1; r <= last; r++) {
