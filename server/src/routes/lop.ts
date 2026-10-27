@@ -3,9 +3,9 @@ import { layDb } from '../db/connection.js';
 import { buoiCuaLop, taoNhieuBuoi } from '../repositories/buoi.js';
 import { layCaiDat } from '../repositories/caiDat.js';
 import { chiTietLop, dsLop, layLop, nhanBanLop, suaLop, taoLop, xoaLop } from '../repositories/lop.js';
-import { sinhLichChiTiet, soBuoiDuKien, type DuKien } from '../services/sinhLich.js';
+import { doiLichTheoMau, sinhLichChiTiet, soBuoiDuKien, type DuKien } from '../services/sinhLich.js';
 import { khongTimThay, LoiApp } from '../utils/loi.js';
-import { moTaThu, taoLichPhanCong } from '../utils/lichPhanCong.js';
+import { moTaThu, phanTichLichPhanCong, taoLichPhanCong } from '../utils/lichPhanCong.js';
 import { z, zChuoiTuyChon, zId, zIdThamSo, zNgay, zQueryId, zTenSheet, zTrangThai } from '../utils/zod.js';
 
 const zDuKien = z.enum(['S', 'C', 'SC']);
@@ -120,10 +120,70 @@ lopRouter.get('/:id', (req, res) => {
   res.json(ct);
 });
 
+const schemaSuaLop = schemaLop
+  .partial()
+  .extend({ dong_bo_lich: z.boolean().default(false), keo_dai_lich: z.boolean().default(false) });
+
+const cungThu = (a: Partial<Record<number, DuKien>>, b: Partial<Record<number, DuKien>>) =>
+  [2, 3, 4, 5, 6, 7, 8].every((t) => (a[t] ?? null) === (b[t] ?? null));
+
+// Sửa lớp; dong_bo_lich = true thì đổi các ngày đã có cho khớp lịch tuần / ngày bắt đầu, kết thúc mới:
+// thêm ngày mới, xóa ngày chưa chấm không còn đúng lịch, giữ nguyên ngày đã chấm, giữ ngày kết thúc làm buổi cuối.
+// keo_dai_lich = true: đến ngày kết thúc chưa đủ số buổi kế hoạch thì sinh tiếp đến khi đủ (dời ngày kết thúc)
 lopRouter.put('/:id', (req, res) => {
   const { id } = zIdThamSo.parse(req.params);
-  layLopHoac404(id);
-  res.json(suaLop(id, schemaLop.partial().parse(req.body)));
+  const cu = layLopHoac404(id);
+  const { dong_bo_lich, keo_dai_lich, ...d } = schemaSuaLop.parse(req.body);
+  if (!dong_bo_lich) {
+    res.json(suaLop(id, d));
+    return;
+  }
+  const lichTuan = d.lich_tuan !== undefined ? d.lich_tuan : cu.lich_tuan;
+  const batDau = d.ngay_bat_dau !== undefined ? d.ngay_bat_dau : cu.ngay_bat_dau;
+  const ketThuc = d.ngay_ket_thuc !== undefined ? d.ngay_ket_thuc : cu.ngay_ket_thuc;
+  const soTiet = d.so_tiet !== undefined ? d.so_tiet : cu.so_tiet;
+  const soBuoi =
+    (d.so_buoi_ke_hoach !== undefined ? d.so_buoi_ke_hoach : cu.so_buoi_ke_hoach) ??
+    (soTiet ? Math.ceil(soTiet / (d.tiet_moi_buoi ?? cu.tiet_moi_buoi)) : null);
+  if (!lichTuan) throw new LoiApp(400, 'Để cập nhật lịch, cần chọn thứ dạy trong tuần');
+  if (!batDau) throw new LoiApp(400, 'Để cập nhật lịch, cần nhập ngày bắt đầu');
+  if (!ketThuc && !soBuoi) throw new LoiApp(400, 'Để cập nhật lịch, cần nhập ngày kết thúc hoặc số buổi kế hoạch');
+  if (ketThuc && ketThuc < batDau) throw new LoiApp(400, 'Ngày kết thúc phải sau ngày bắt đầu');
+
+  const thu = docLichTuan(lichTuan);
+  const kq = doiLichTheoMau(
+    { batDau, ketThuc, soBuoi, thu, ngayNghi: layCaiDat().ngay_nghi, keoDai: keo_dai_lich },
+    buoiCuaLop(id),
+  );
+  // "Lịch phân công" đang mô tả đúng lịch cũ (tự viết) và không bị sửa tay → viết lại theo lịch mới
+  const lpcCu = d.lich_phan_cong !== undefined ? d.lich_phan_cong : cu.lich_phan_cong;
+  const thuCu = cu.lich_tuan ? docLichTuan(cu.lich_tuan) : phanTichLichPhanCong(cu.lich_phan_cong).thu;
+  const tuViet = !lpcCu || (lpcCu === cu.lich_phan_cong && cungThu(phanTichLichPhanCong(lpcCu).thu, thuCu));
+
+  const db = layDb();
+  const lop = db.transaction(() => {
+    const xoaBuoi = db.prepare('DELETE FROM buoi WHERE id = ?');
+    for (const b of kq.xoa) xoaBuoi.run(b.id);
+    const doiDuKien = db.prepare('UPDATE buoi SET du_kien = ? WHERE id = ?');
+    for (const b of kq.doiDuKien) doiDuKien.run(b.du_kien, b.id);
+    taoNhieuBuoi(id, kq.them);
+    return suaLop(id, {
+      ...d,
+      ...(tuViet ? { lich_phan_cong: kq.lich.length ? taoLichPhanCong(thu, kq.lich[0]) : moTaThu(thu) } : {}),
+      ngay_ket_thuc: (keo_dai_lich ? kq.ketThuc : ketThuc) ?? kq.ketThuc,
+    });
+  })();
+  res.json({
+    ...lop,
+    doi_lich: {
+      them: kq.them.length,
+      xoa: kq.xoa.length,
+      doi_du_kien: kq.doiDuKien.length,
+      giu_da_cham: kq.giuDaCham.length,
+      tong_buoi: kq.tongBuoi,
+      thieu: kq.thieu,
+    },
+  });
 });
 
 lopRouter.delete('/:id', (req, res) => {

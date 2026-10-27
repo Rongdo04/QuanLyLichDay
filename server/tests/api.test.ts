@@ -325,4 +325,58 @@ describe('Tạo lớp kèm lịch dạy hằng tuần', () => {
     expect(nb.body.lich_tuan).toBe('{"2":"SC"}');
     expect((await api().put(`/api/lop/${r.body.id}`).send({ lich_tuan: {} }).expect(200)).body.lich_tuan).toBeNull();
   });
+
+  it('sửa lịch tuần có dong_bo_lich: đổi các ngày đã có, giữ ngày đã chấm và ngày kết thúc', async () => {
+    const r = await api()
+      .post('/api/lop')
+      .send({ ...lop, ngay_bat_dau: '2026-10-28', ngay_ket_thuc: '2026-12-05', lich_tuan: { 4: 'C', 7: 'SC' } })
+      .expect(201);
+    const id = r.body.id;
+    const cu = (await api().get(`/api/lop/${id}`)).body.buoi as { id: number; ngay: string }[];
+    // Đã chấm chiều T7 31/10 → phải giữ
+    const t7 = cu.find((b) => b.ngay === '2026-10-31')!;
+    await api().patch(`/api/buoi/${t7.id}`).send({ chieu: 1 }).expect(200);
+
+    const s = await api()
+      .put(`/api/lop/${id}`)
+      .send({ lich_tuan: { 2: 'C', 4: 'C' }, lich_phan_cong: r.body.lich_phan_cong, dong_bo_lich: true })
+      .expect(200);
+    expect(s.body.doi_lich).toMatchObject({ them: 5, xoa: 4, doi_du_kien: 0, giu_da_cham: 1 });
+    expect(s.body.lich_phan_cong).toBe('Chiều T2, T4. Bắt đầu từ chiều thứ 4 28/10/2026');
+    const moi = (await api().get(`/api/lop/${id}`)).body.buoi as { ngay: string; du_kien: string }[];
+    expect(moi.map((b) => b.ngay)).toEqual([
+      '2026-10-28', '2026-10-31', '2026-11-02', '2026-11-04', '2026-11-09', '2026-11-11', '2026-11-16',
+      '2026-11-18', '2026-11-23', '2026-11-25', '2026-11-30', '2026-12-02', '2026-12-05',
+    ]);
+    // Ngày kết thúc là buổi cuối: giữ, kể cả không đúng thứ trong lịch tuần mới
+    expect(moi.at(-1)!.du_kien).toBe('SC');
+    expect(s.body.ngay_ket_thuc).toBe('2026-12-05');
+    expect(moi.find((b) => b.ngay === '2026-11-02')!.du_kien).toBe('C');
+
+    // Không gửi dong_bo_lich thì không đụng các ngày
+    await api().put(`/api/lop/${id}`).send({ lich_tuan: { 6: 'S' } }).expect(200);
+    expect((await api().get(`/api/lop/${id}`)).body.buoi).toHaveLength(13);
+  });
+
+  it('đổi lịch không đủ số buổi kế hoạch: báo thiếu, hoặc kéo dài đến khi đủ', async () => {
+    const r = await api()
+      .post('/api/lop')
+      .send({ ...lop, so_buoi_ke_hoach: 18, ngay_bat_dau: '2026-10-28', ngay_ket_thuc: '2026-12-05', lich_tuan: { 4: 'C', 7: 'SC' } })
+      .expect(201);
+    const id = r.body.id;
+    const doi = { lich_tuan: { 2: 'C', 4: 'C' }, dong_bo_lich: true };
+
+    // Giữ ngày kết thúc: 11 chiều T2/T4 + cả ngày 05/12 = 13 buổi, thiếu 5
+    const giu = await api().put(`/api/lop/${id}`).send(doi).expect(200);
+    expect(giu.body.doi_lich).toMatchObject({ tong_buoi: 13, thieu: 5 });
+    expect(giu.body.ngay_ket_thuc).toBe('2026-12-05');
+
+    // Kéo dài: đủ 18 chiều T2/T4, buổi cuối 28/12
+    const keo = await api().put(`/api/lop/${id}`).send({ ...doi, keo_dai_lich: true }).expect(200);
+    expect(keo.body.doi_lich).toMatchObject({ tong_buoi: 18, thieu: 0 });
+    expect(keo.body.ngay_ket_thuc).toBe('2026-12-28');
+    const ds = (await api().get(`/api/lop/${id}`)).body.buoi as { ngay: string }[];
+    expect(ds).toHaveLength(18);
+    expect(ds.at(-1)!.ngay).toBe('2026-12-28');
+  });
 });

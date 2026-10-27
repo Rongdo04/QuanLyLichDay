@@ -8,4 +8,4 @@ export {
   taoLichPhanCong,
   type LichTheoThu,
 } from '../../../server/src/utils/lichPhanCong';
-export { sinhLichChiTiet, soBuoiDuKien as soBuoiTheoDuKien } from '../../../server/src/services/sinhLich';
+export { doiLichTheoMau, sinhLichChiTiet, soBuoiDuKien as soBuoiTheoDuKien } from '../../../server/src/services/sinhLich';

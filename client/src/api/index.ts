@@ -31,6 +31,7 @@ import type {
   Lop,
   LopChiTiet,
   LopThongKe,
+  LopVuaSua,
   LopVuaTao,
   NgaySinh,
   SheetXacNhan,
@@ -127,7 +128,8 @@ export const api = {
     ds: (loc: LocLop = {}) => goiApi<LopThongKe[]>(`/lop${chuoiQuery({ ...loc })}`),
     ct: (id: number) => goiApi<LopChiTiet>(`/lop/${id}`),
     tao: (d: DuLieuLop & { tu_sinh_lich?: boolean }) => goiApi<LopVuaTao>('/lop', { json: d }),
-    sua: (id: number, d: Partial<DuLieuLop>) => goiApi<Lop>(`/lop/${id}`, { method: 'PUT', json: d }),
+    sua: (id: number, d: Partial<DuLieuLop> & { dong_bo_lich?: boolean; keo_dai_lich?: boolean }) =>
+      goiApi<LopVuaSua>(`/lop/${id}`, { method: 'PUT', json: d }),
     xoa: (id: number) => goiApi<void>(`/lop/${id}`, { method: 'DELETE' }),
     nhanBan: (id: number, d: Partial<DuLieuLop> = {}) => goiApi<Lop>(`/lop/${id}/nhan-ban`, { json: d }),
     xemTruocLich: (id: number, ts: ThamSoSinhLich) =>

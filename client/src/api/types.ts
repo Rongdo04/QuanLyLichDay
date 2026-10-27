@@ -134,6 +134,9 @@ export interface DuLieuLop {
 }
 
 // Kết quả tạo lớp: kèm số ngày đã tự sinh theo lịch tuần
+// Kết quả sửa lớp: có đồng bộ lịch thì kèm số ngày đã thêm / xóa / đổi
+export type LopVuaSua = Lop & { doi_lich?: { them: number; xoa: number; doi_du_kien: number; giu_da_cham: number; tong_buoi: number; thieu: number } };
+
 export type LopVuaTao = Lop & { so_ngay_sinh: number; ngay_bo_qua?: { ngay: string; ly_do: string }[] };
 
 export interface NgayNghi {

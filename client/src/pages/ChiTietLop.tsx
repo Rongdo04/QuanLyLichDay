@@ -8,7 +8,7 @@ import { ChonThuTrongTuan, docLichTuan, lichTuanGui } from '../components/ChonTh
 import { TrinhSinhLich } from '../components/TrinhSinhLich';
 import { dinhDangNgay, dinhDangTien, donViGia, NHAN_TRANG_THAI } from '../lib/format';
 import { useDsDiaDiem, useDsLop, useDsTruong } from '../lib/hooks';
-import { phanTichLichPhanCong, sinhLichChiTiet, soBuoiTheoDuKien, type LichTheoThu } from '../lib/nghiepVu';
+import { doiLichTheoMau, phanTichLichPhanCong, sinhLichChiTiet, soBuoiTheoDuKien, type LichTheoThu } from '../lib/nghiepVu';
 import { thongBao } from '../lib/thongBao';
 
 // Form dùng chuỗi cho mọi ô nhập, đổi sang số / null khi lưu
@@ -99,6 +99,12 @@ function loiTenSheet(ten: string): string | null {
   return null;
 }
 
+// Lịch tuần đã lưu của lớp; lớp cũ chưa có thì đọc từ "Lịch phân công"
+function thuDaLuu(l: Lop): LichTheoThu {
+  const luu = docLichTuan(l.lich_tuan);
+  return Object.keys(luu).length ? luu : phanTichLichPhanCong(l.lich_phan_cong).thu;
+}
+
 export function TrangChiTietLop() {
   const { id } = useParams();
   // key theo id: chuyển từ "lớp mới" sang lớp vừa tạo sẽ dựng lại trang từ đầu
@@ -125,6 +131,11 @@ function ChiTietLop({ id }: { id: number | null }) {
   // Lịch dạy hằng tuần (thứ + sáng/chiều); lớp cũ chưa có thì đọc từ "Lịch phân công"
   const [thu, setThu] = useState<LichTheoThu>({});
   const daSuaThu = useRef(false);
+  // Sửa lịch tuần / ngày bắt đầu, kết thúc thì đổi luôn các ngày đã có (bỏ chọn để giữ nguyên)
+  // null = theo mặc định: bật khi vừa sửa lịch, tắt khi chỉ phát hiện lịch lệch
+  const [dongBoLich, setDongBoLich] = useState<boolean | null>(null);
+  // Lịch mới đến ngày kết thúc không đủ số buổi kế hoạch → kéo dài đến khi đủ (bỏ chọn để giữ ngày kết thúc)
+  const [keoDaiLich, setKeoDaiLich] = useState(true);
   const { data: caiDat } = useQuery({ queryKey: khoa.caiDat, queryFn: api.caiDat.lay });
 
   // Dữ liệu lớp thay đổi (vừa lưu, vừa sinh lịch…) → cập nhật các ô chưa sửa, giữ nguyên ô đang sửa
@@ -136,19 +147,22 @@ function ChiTietLop({ id }: { id: number | null }) {
       return moi;
     });
     if (!daSuaThu.current) {
-      const luu = docLichTuan(lop.lich_tuan);
-      setThu(Object.keys(luu).length ? luu : phanTichLichPhanCong(lop.lich_phan_cong).thu);
+      setThu(thuDaLuu(lop));
     }
   }, [lop]);
 
   const luu = useMutation({
-    mutationFn: async (f: FormLop) => {
+    mutationFn: async ({ f, dongBo, keoDai }: { f: FormLop; dongBo: boolean; keoDai: boolean }) => {
       const d = { ...sangDuLieu(f), lich_tuan: lichTuanGui(thu) };
-      return laMoi ? api.lop.tao(d) : { ...(await api.lop.sua(id!, d)), so_ngay_sinh: 0 };
+      return laMoi
+        ? api.lop.tao(d)
+        : { ...(await api.lop.sua(id!, { ...d, dong_bo_lich: dongBo, keo_dai_lich: keoDai })), so_ngay_sinh: 0 };
     },
     onSuccess: (l) => {
       daSua.current.clear();
       daSuaThu.current = false;
+      setDongBoLich(null);
+      setKeoDaiLich(true);
       qc.invalidateQueries();
       if (laMoi) {
         if (l.so_ngay_sinh > 0) {
@@ -160,7 +174,20 @@ function ChiTietLop({ id }: { id: number | null }) {
         }
       } else {
         setForm(tuLop(l));
-        thongBao('Đã lưu thay đổi');
+        const dl = 'doi_lich' in l ? l.doi_lich : undefined;
+        const phan = dl
+          ? [
+              dl.them && `thêm ${dl.them} ngày`,
+              dl.xoa && `bỏ ${dl.xoa} ngày`,
+              dl.doi_du_kien && `đổi buổi dự kiến ${dl.doi_du_kien} ngày`,
+            ].filter(Boolean)
+          : [];
+        thongBao(
+          phan.length
+            ? `Đã lưu và cập nhật lịch: ${phan.join(', ')}${dl!.giu_da_cham ? `; giữ ${dl!.giu_da_cham} ngày đã chấm` : ''}` +
+                (dl!.thieu ? `. Còn thiếu ${dl!.thieu} buổi so với kế hoạch` : '')
+            : 'Đã lưu thay đổi',
+        );
       }
     },
   });
@@ -197,6 +224,45 @@ function ChiTietLop({ id }: { id: number | null }) {
     });
     return { ngay, boQua, soBuoi: ngay.reduce((s, n) => s + soBuoiTheoDuKien(n.du_kien), 0) };
   }, [laMoi, form, coThu, thu, caiDat]);
+
+  // Lớp đang có: sửa lịch tuần / ngày bắt đầu, kết thúc, số buổi → xem trước các ngày sẽ đổi
+  const lichDaSua =
+    !laMoi &&
+    !!lop &&
+    !!form &&
+    (JSON.stringify(lichTuanGui(thu)) !== JSON.stringify(lichTuanGui(thuDaLuu(lop))) ||
+      form.ngay_bat_dau !== (lop.ngay_bat_dau ?? '') ||
+      form.ngay_ket_thuc !== (lop.ngay_ket_thuc ?? '') ||
+      form.so_buoi_ke_hoach !== (lop.so_buoi_ke_hoach ? String(lop.so_buoi_ke_hoach) : ''));
+  const xemTruocDoiLich = (() => {
+    if (laMoi || !form || !lop) return null;
+    const soBuoi =
+      Number(form.so_buoi_ke_hoach) ||
+      (Number(form.so_tiet) > 0 ? Math.ceil(Number(form.so_tiet) / (Number(form.tiet_moi_buoi) || lop.tiet_moi_buoi)) : null);
+    const loi = !coThu
+      ? 'Chưa chọn thứ dạy nào nên không đổi các ngày đã có.'
+      : !form.ngay_bat_dau
+        ? 'Nhập ngày bắt đầu để cập nhật các ngày theo lịch mới.'
+        : !form.ngay_ket_thuc && !soBuoi
+          ? 'Nhập ngày kết thúc hoặc số buổi kế hoạch để cập nhật các ngày theo lịch mới.'
+          : form.ngay_ket_thuc && form.ngay_ket_thuc < form.ngay_bat_dau
+            ? 'Ngày kết thúc phải sau ngày bắt đầu.'
+            : null;
+    if (loi) return { loi, giu: null, keo: null, soBuoi };
+    const ts = { batDau: form.ngay_bat_dau, ketThuc: form.ngay_ket_thuc || null, soBuoi, thu, ngayNghi: caiDat?.ngay_nghi ?? [] };
+    // Giữ ngày kết thúc làm buổi cuối; thiếu buổi thì tính thêm phương án kéo dài đến khi đủ
+    const giu = doiLichTheoMau(ts, lop.buoi);
+    const keo = giu.thieu > 0 && soBuoi ? doiLichTheoMau({ ...ts, keoDai: true }, lop.buoi) : null;
+    return { loi: null, giu, keo, soBuoi };
+  })();
+  const coKeoDai = !!xemTruocDoiLich?.keo;
+  const keoDai = coKeoDai && keoDaiLich;
+  const kqDoiLich = keoDai ? xemTruocDoiLich!.keo : xemTruocDoiLich?.giu;
+  const kqGiu = xemTruocDoiLich?.giu;
+  const coThayDoi = !!kqGiu && kqGiu.them.length + kqGiu.xoa.length + kqGiu.doiDuKien.length > 0;
+  // Chưa sửa gì nhưng các ngày đã có không khớp lịch tuần đã lưu (VD lưu lịch tuần trước khi có tự đổi ngày)
+  const lichLech = !lichDaSua && coThayDoi;
+  const dongBo = dongBoLich ?? lichDaSua;
 
   if (!laMoi && isLoading) return <DangTai />;
   if (!laMoi && (error || !lop)) return <BaoLoiTai loi={error ?? new Error('Không tìm thấy lớp')} />;
@@ -241,7 +307,7 @@ function ChiTietLop({ id }: { id: number | null }) {
   };
   const guiForm = (e: FormEvent) => {
     e.preventDefault();
-    if (!loiSheet && !loiLich) luu.mutate(form);
+    if (!loiSheet && !loiLich) luu.mutate({ f: form, dongBo: dongBo && !!kqDoiLich, keoDai });
   };
   const dongSinhLich = () => {
     setMoSinhLich(false);
@@ -454,9 +520,56 @@ function ChiTietLop({ id }: { id: number | null }) {
                   {form.ngay_ket_thuc && form.so_buoi_ke_hoach ? ' Dừng ở mốc đến trước: ngày kết thúc hoặc đủ số buổi kế hoạch.' : ''}
                 </p>
               ) : null
+            ) : lichDaSua || lichLech ? (
+              <div className="mt-2 space-y-1">
+                {lichLech && (
+                  <p className="text-sm text-amber-700">
+                    Các ngày trong lịch (trang Chấm buổi) chưa khớp với lịch dạy hằng tuần ở trên.
+                  </p>
+                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={dongBo} onChange={(e) => setDongBoLich(e.target.checked)} />
+                  {lichLech
+                    ? 'Khi lưu, đổi các ngày đã có cho khớp lịch tuần'
+                    : 'Đổi luôn các ngày đã có trong lịch (và trang Chấm buổi) theo lịch mới'}
+                </label>
+                {!dongBo && !lichLech ? (
+                  <p className="text-xs text-slate-500">Chỉ lưu thông tin lớp, các ngày đã có giữ nguyên.</p>
+                ) : xemTruocDoiLich?.loi ? (
+                  <p className="text-sm text-amber-700">{xemTruocDoiLich.loi}</p>
+                ) : kqDoiLich ? (
+                  <>
+                    {coKeoDai && (
+                      <div className="rounded border border-amber-200 bg-amber-50 p-2 text-sm">
+                        <p className="text-amber-800">
+                          Lịch mới đến ngày kết thúc {dinhDangNgay(form.ngay_ket_thuc)} chỉ có {kqGiu!.tongBuoi}/
+                          {xemTruocDoiLich!.soBuoi} buổi (thiếu {kqGiu!.thieu} buổi).
+                        </p>
+                        <label className="mt-1 flex items-center gap-2">
+                          <input type="checkbox" checked={keoDaiLich} onChange={(e) => setKeoDaiLich(e.target.checked)} />
+                          Kéo dài đến khi đủ {xemTruocDoiLich!.soBuoi} buổi
+                          {xemTruocDoiLich!.keo!.ketThuc && ` (buổi cuối ${dinhDangNgay(xemTruocDoiLich!.keo!.ketThuc)})`}
+                        </label>
+                      </div>
+                    )}
+                    <MoTaDoiLich kq={kqDoiLich} />
+                  </>
+                ) : null}
+                {lichLech && (
+                  <button
+                    type="button"
+                    className="btn-phu"
+                    disabled={luu.isPending || !!loiSheet}
+                    onClick={() => luu.mutate({ f: form, dongBo: true, keoDai })}
+                  >
+                    Cập nhật các ngày theo lịch tuần ngay
+                  </button>
+                )}
+              </div>
             ) : (
               <p className="mt-1.5 text-xs text-slate-500">
-                Sửa lịch tuần không tự đổi các ngày đã có. Muốn thêm ngày theo lịch mới, bấm "Sinh thêm ngày".
+                Sửa thứ dạy, ngày bắt đầu hoặc ngày kết thúc thì khi lưu, các ngày chưa chấm sẽ tự đổi theo lịch mới. Ngày đã chấm được giữ
+                nguyên.
               </p>
             )}
           </div>
@@ -535,6 +648,49 @@ function ChiTietLop({ id }: { id: number | null }) {
         </Modal>
       )}
     </>
+  );
+}
+
+const TEN_BUOI = { S: 'sáng', C: 'chiều', SC: 'cả ngày' } as const;
+
+function MoTaDoiLich({ kq }: { kq: ReturnType<typeof doiLichTheoMau> }) {
+  const { them, xoa, doiDuKien, giuDaCham, lich } = kq;
+  if (!them.length && !xoa.length && !doiDuKien.length)
+    return <p className="text-sm text-slate-600">Các ngày đã có đã khớp lịch mới, không cần đổi.</p>;
+  const ds = (a: { ngay: string }[]) =>
+    a.length > 6 ? `${a.slice(0, 6).map((n) => dinhDangNgay(n.ngay)).join(', ')}…` : a.map((n) => dinhDangNgay(n.ngay)).join(', ');
+  return (
+    <ul className="space-y-0.5 text-sm">
+      <li className="text-slate-600">
+        Lịch mới: <b>{lich.length} ngày</b>, {kq.tongBuoi} buổi
+        {lich.length > 0 && ` (${dinhDangNgay(lich[0].ngay)} – ${dinhDangNgay(lich.at(-1)!.ngay)})`}. Cập nhật sẽ:
+      </li>
+      {them.length > 0 && (
+        <li className="text-emerald-700">
+          + Thêm {them.length} ngày: {ds(them)}
+        </li>
+      )}
+      {xoa.length > 0 && (
+        <li className="text-red-700">
+          − Bỏ {xoa.length} ngày chưa chấm: {ds(xoa)}
+        </li>
+      )}
+      {doiDuKien.length > 0 && (
+        <li className="text-blue-700">
+          ~ Đổi buổi dự kiến {doiDuKien.length} ngày:{' '}
+          {doiDuKien
+            .slice(0, 6)
+            .map((d) => `${dinhDangNgay(d.ngay)} ${d.cu ? `${TEN_BUOI[d.cu]} → ` : ''}${TEN_BUOI[d.du_kien]}`)
+            .join(', ')}
+          {doiDuKien.length > 6 && '…'}
+        </li>
+      )}
+      {giuDaCham.length > 0 && (
+        <li className="text-amber-700">
+          Giữ {giuDaCham.length} ngày đã chấm không còn đúng lịch: {ds(giuDaCham)} (xóa tay ở trang Chấm buổi nếu cần)
+        </li>
+      )}
+    </ul>
   );
 }
 

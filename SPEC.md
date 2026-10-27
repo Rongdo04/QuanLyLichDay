@@ -179,6 +179,7 @@ Bố cục chung: thanh menu bên trái gồm Tổng quan, Chấm buổi, Lớp 
   - Có **danh sách ngày nghỉ** (Tết, lễ) để bỏ qua. Lưu ở `cai_dat` dạng JSON và sửa được trong Cài đặt.
   - Bước xem trước: hiện danh sách ngày sẽ tạo, cho bỏ chọn từng ngày, sau đó bấm Xác nhận. Không tạo trùng ngày đã có (nhờ ràng buộc `UNIQUE`).
   - Ngày được sinh có `sang = chieu = 0`. Phần dự kiến sáng/chiều chỉ để hiển thị gợi ý: lưu thêm cột `du_kien` (`'S'|'C'|'SC'`) trong bảng `buoi` qua migration 002.
+  - **Sửa lịch của lớp đang có** (thứ dạy, ngày bắt đầu/kết thúc, số buổi): form hiện xem trước và khi lưu (`PUT /lop/:id` với `dong_bo_lich: true`) tự đổi các ngày đã có: thêm ngày mới, bỏ ngày **chưa chấm** không còn đúng lịch, đổi `du_kien`. Ngày **đã chấm** (có sáng/chiều/ghi chú) luôn giữ nguyên. **Ngày kết thúc là buổi cuối**: luôn giữ, kể cả khi không đúng thứ trong lịch mới. Tổng buổi (tính cả ngày đã chấm ngoài lịch) không vượt số buổi kế hoạch (hoặc quy từ số tiết): dư thì bỏ **lần lượt từ cuối**, bỏ chiều trước rồi mới bỏ cả ngày (VD sáng T2 + cả ngày T3, 13 buổi → ngày cuối T3 chỉ còn sáng, không xóa T2 trước đó). Đến ngày kết thúc mà chưa đủ thì form báo thiếu và mặc định **kéo dài** (`keo_dai_lich: true`) đến khi đủ, dời ngày kết thúc. "Lịch phân công" tự viết lại nếu đang là chuỗi tự sinh từ lịch cũ.
 - Nút **"Nhân bản lớp"** để tạo học phần mới cho cùng lớp mà không phải nhập lại thông tin.
 
 ### 6.4 Trường, Địa điểm, Cài đặt
