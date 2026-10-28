@@ -15,7 +15,6 @@ export interface NguoiDung {
 
 export interface TrangThaiDangNhap {
   nguoi_dung: NguoiDung | null;
-  can_khoi_tao: boolean; // chưa có tài khoản nào
 }
 
 export interface Truong {

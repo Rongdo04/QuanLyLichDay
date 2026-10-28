@@ -23,7 +23,7 @@ export function TrangHoSo() {
   const luu = useMutation({
     mutationFn: () => api.taiKhoan.suaToi({ ho_ten: f.ho_ten, email: f.email }),
     onSuccess: (n) => {
-      qc.setQueryData<TrangThaiDangNhap>(khoa.toi, { nguoi_dung: n, can_khoi_tao: false });
+      qc.setQueryData<TrangThaiDangNhap>(khoa.toi, { nguoi_dung: n });
       thongBao('Đã lưu hồ sơ');
     },
   });

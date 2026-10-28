@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Người dùng mới có thư mục dữ liệu riêng trong DATA_DIR → dùng thư mục tạm (đặt trước khi import mã nguồn)
 const thuMucTam = vi.hoisted(() => {
@@ -16,7 +16,7 @@ const thuMucTam = vi.hoisted(() => {
 
 import { taoApp } from '../src/app.js';
 import { batBuocKhongGian, datDb, moDb } from '../src/db/connection.js';
-import { bamMatKhau, datDbHeThong, dungMatKhau } from '../src/services/taiKhoan.js';
+import { bamMatKhau, datDbHeThong, dungMatKhau, taoNguoiDung } from '../src/services/taiKhoan.js';
 
 // Như khi chạy thật: mọi truy cập dữ liệu phải nằm trong không gian của một người dùng
 batBuocKhongGian();
@@ -31,11 +31,10 @@ const lopMau = {
 
 // Tạo quản trị (nhận DB mặc định) + một người bạn, trả về hai phiên đăng nhập
 async function chuanBi() {
+  // Không có đăng ký qua web: quản trị đầu tiên tạo như lệnh "npm run tai-khoan -- tao"
+  taoNguoiDung({ ten_dang_nhap: 'hien', ho_ten: 'Đặng Mạnh Hiền', email: 'hien@example.com', mat_khau: 'matkhau1', la_quan_tri: true });
   const qt = request.agent(app);
-  await qt
-    .post('/api/tai-khoan/khoi-tao')
-    .send({ ten_dang_nhap: 'hien', ho_ten: 'Đặng Mạnh Hiền', email: 'Hien@Example.com', mat_khau: 'matkhau1' })
-    .expect(200);
+  await qt.post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'hien', mat_khau: 'matkhau1' }).expect(200);
   await qt
     .post('/api/tai-khoan/nguoi-dung')
     .send({ ten_dang_nhap: 'Lan', ho_ten: 'Nguyễn Thị Lan', mat_khau: 'matkhau2' })
@@ -67,19 +66,20 @@ describe('mật khẩu', () => {
 });
 
 describe('đăng nhập', () => {
-  it('chưa có tài khoản: cần khởi tạo, dữ liệu bị chặn', async () => {
+  it('chưa đăng nhập: dữ liệu bị chặn; không có đăng ký qua web, kể cả khi chưa có tài khoản nào', async () => {
     const { body } = await request(app).get('/api/tai-khoan/toi').expect(200);
-    expect(body).toEqual({ nguoi_dung: null, can_khoi_tao: true });
+    expect(body).toEqual({ nguoi_dung: null });
     await request(app).get('/api/lop').expect(401);
     await request(app).get('/api/suc-khoe').expect(200);
+    await request(app).post('/api/tai-khoan/khoi-tao').send({ ten_dang_nhap: 'nguoi.la', ho_ten: 'X', mat_khau: 'matkhau1' }).expect(401);
+    await request(app).post('/api/tai-khoan/nguoi-dung').send({ ten_dang_nhap: 'nguoi.la', ho_ten: 'X', mat_khau: 'matkhau1' }).expect(401);
   });
 
-  it('khởi tạo: tạo quản trị và vào luôn, chỉ làm được khi chưa có tài khoản', async () => {
-    const d = { ten_dang_nhap: 'hien', ho_ten: 'Hiền', mat_khau: 'matkhau1' };
-    const r = await request(app).post('/api/tai-khoan/khoi-tao').send(d).expect(200);
+  it('đăng nhập: cookie phiên HttpOnly', async () => {
+    taoNguoiDung({ ten_dang_nhap: 'hien', ho_ten: 'Hiền', mat_khau: 'matkhau1' });
+    const r = await request(app).post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'hien', mat_khau: 'matkhau1' }).expect(200);
     expect(r.body.nguoi_dung).toMatchObject({ ten_dang_nhap: 'hien', la_quan_tri: 1, email: null });
     expect(r.headers['set-cookie'][0]).toMatch(/^phien=.+HttpOnly; SameSite=Lax/);
-    await request(app).post('/api/tai-khoan/khoi-tao').send({ ...d, ten_dang_nhap: 'nguoi.la' }).expect(409);
   });
 
   it('đăng nhập bằng email (không phân biệt hoa thường); email trùng / sai bị từ chối', async () => {
@@ -110,11 +110,103 @@ describe('đăng nhập', () => {
     await request(app).post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'lan', mat_khau: 'matkhau2' }).expect(429);
   });
 
+  it('khóa tăng dần: sai 5 lần chờ 5 phút, sai 10 lần chờ 30 phút; xóa cookie không giúp gì', async () => {
+    await chuanBi();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const sai = () => request(app).post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'lan', mat_khau: 'sai' });
+      for (let i = 1; i <= 4; i++) expect((await sai().expect(401)).body.loi).toContain(`Còn ${5 - i} lần thử`);
+      expect((await sai().expect(401)).body.loi).toContain('chờ 5 phút');
+      // Mỗi request là một trình duyệt "mới" không cookie: vẫn bị chặn vì server đếm theo tên + IP
+      await sai().expect(429);
+      for (let i = 6; i <= 10; i++) {
+        vi.advanceTimersByTime(5 * 60_000 + 1000);
+        await sai().expect(401);
+      }
+      vi.advanceTimersByTime(5 * 60_000 + 1000);
+      expect((await sai().expect(429)).body.loi).toMatch(/2[0-9] phút/); // còn ~25 phút của mức 30 phút
+      vi.advanceTimersByTime(25 * 60_000);
+      await request(app).post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'lan', mat_khau: 'matkhau2' }).expect(200);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('nhiều IP cùng đoán một tài khoản (botnet) cũng bị chặn', async () => {
+    await chuanBi();
+    const tu = (ip: string, mk: string) =>
+      request(app).post('/api/tai-khoan/dang-nhap').set('X-Forwarded-For', ip).send({ ten_dang_nhap: 'lan', mat_khau: mk });
+    for (let i = 0; i < 20; i++) await tu(`198.51.100.${i}`, 'sai').expect(401);
+    await tu('198.51.100.200', 'matkhau2').expect(429);
+    // Người khác cùng mạng nhưng tài khoản khác vẫn vào được
+    await request(app)
+      .post('/api/tai-khoan/dang-nhap')
+      .set('X-Forwarded-For', '198.51.100.200')
+      .send({ ten_dang_nhap: 'hien', mat_khau: 'matkhau1' })
+      .expect(200);
+  });
+
   it('đăng xuất thì phiên hết dùng được', async () => {
     const { ban } = await chuanBi();
     await ban.get('/api/lop').expect(200);
     await ban.post('/api/tai-khoan/dang-xuat').expect(204);
     await ban.get('/api/lop').expect(401);
+  });
+});
+
+describe('siêu quản trị (.env)', () => {
+  beforeEach(() => {
+    process.env.SIEU_QUAN_TRI_TEN = 'Admin';
+    process.env.SIEU_QUAN_TRI_MAT_KHAU = 'mat-khau-sieu-123';
+    // DB của siêu quản trị là file thật trong DATA_DIR tạm (đã đóng ở beforeEach chung): xóa để mỗi test bắt đầu trống
+    fs.rmSync(path.join(thuMucTam, 'sieu-quan-tri'), { recursive: true, force: true });
+  });
+  afterEach(() => {
+    delete process.env.SIEU_QUAN_TRI_TEN;
+    delete process.env.SIEU_QUAN_TRI_MAT_KHAU;
+  });
+
+  const vaoSieu = async () => {
+    const s = request.agent(app);
+    await s.post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'admin', mat_khau: 'mat-khau-sieu-123' }).expect(200);
+    return s;
+  };
+
+  it('đăng nhập được, quản lý tài khoản; người mới có dữ liệu riêng', async () => {
+    const s = await vaoSieu();
+    expect((await s.get('/api/tai-khoan/toi')).body.nguoi_dung).toMatchObject({ ten_dang_nhap: 'admin', la_quan_tri: 1 });
+    await s.post('/api/tai-khoan/nguoi-dung').send({ ten_dang_nhap: 'lan', ho_ten: 'Lan', mat_khau: 'matkhau2' }).expect(201);
+    await s.post('/api/tai-khoan/nguoi-dung').send({ ten_dang_nhap: 'admin', ho_ten: 'Giả', mat_khau: 'matkhau2' }).expect(409);
+    await s.post('/api/lop').send(lopMau).expect(201);
+    const lan = request.agent(app);
+    await lan.post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'lan', mat_khau: 'matkhau2' }).expect(200);
+    expect((await lan.get('/api/lop')).body).toHaveLength(0);
+    await s.put('/api/tai-khoan/mat-khau').send({ mat_khau_cu: 'mat-khau-sieu-123', mat_khau_moi: 'abcdef' }).expect(400);
+  });
+
+  it('dữ liệu riêng, không dùng chung với tài khoản đầu tiên (người giữ data/giangday.db)', async () => {
+    const { qt } = await chuanBi(); // hien: tài khoản đầu tiên trong DB
+    await qt.post('/api/lop').send(lopMau).expect(201);
+    const s = await vaoSieu();
+    expect((await s.get('/api/lop')).body).toHaveLength(0);
+    await s.post('/api/lop').send({ ...lopMau, ten_sheet: 'Cua_sieu' }).expect(201);
+    await s.post('/api/lop').send({ ...lopMau, ten_sheet: 'Cua_sieu_2' }).expect(201);
+    expect((await qt.get('/api/lop')).body).toHaveLength(1);
+    expect((await s.get('/api/lop')).body).toHaveLength(2);
+    expect((await s.get('/api/cai-dat')).body.ten_gv).toBe('Siêu quản trị');
+  });
+
+  it('mật khẩu dạng băm; đổi mật khẩu trong .env thì phiên cũ hết hiệu lực', async () => {
+    process.env.SIEU_QUAN_TRI_MAT_KHAU = bamMatKhau('mat-khau-sieu-123');
+    const s = await vaoSieu();
+    await s.get('/api/lop').expect(200);
+    process.env.SIEU_QUAN_TRI_MAT_KHAU = 'mat-khau-moi-456';
+    await s.get('/api/lop').expect(401);
+  });
+
+  it('mật khẩu quá ngắn thì không bật', async () => {
+    process.env.SIEU_QUAN_TRI_MAT_KHAU = 'ngan';
+    await request(app).post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'admin', mat_khau: 'ngan' }).expect(401);
   });
 });
 

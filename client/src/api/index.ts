@@ -99,8 +99,6 @@ type DuLieuNguoiDungMoi = { ten_dang_nhap: string; ho_ten: string; email?: strin
 export const api = {
   taiKhoan: {
     toi: () => goiApi<TrangThaiDangNhap>('/tai-khoan/toi'),
-    khoiTao: (d: DuLieuNguoiDungMoi) =>
-      goiApi<{ nguoi_dung: NguoiDung }>('/tai-khoan/khoi-tao', { json: d }),
     dangNhap: (d: { ten_dang_nhap: string; mat_khau: string }) =>
       goiApi<{ nguoi_dung: NguoiDung }>('/tai-khoan/dang-nhap', { json: d }),
     dangXuat: () => goiApi<void>('/tai-khoan/dang-xuat', { method: 'POST' }),
