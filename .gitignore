@@ -21,6 +21,7 @@ data/backups/*
 # Biến môi trường, khóa bí mật
 .env
 .env.*
+!.env.example
 
 # Nhật ký, file tạm
 *.log

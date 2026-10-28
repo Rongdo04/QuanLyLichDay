@@ -7,7 +7,7 @@ import { thongBao, xoaHetThongBao } from '../lib/thongBao';
 import { BaoLoiTai, DangTai } from './ChungUI';
 import { Toasts } from './Toasts';
 
-// Chặn toàn bộ app cho đến khi đăng nhập. Chưa có tài khoản nào thì hiện màn tạo quản trị.
+// Chặn toàn bộ app cho đến khi đăng nhập. Không có đăng ký: tài khoản do quản trị tạo.
 
 export function useNguoiDung(): NguoiDung | null {
   const { data } = useQuery({ queryKey: khoa.toi, queryFn: api.taiKhoan.toi });
@@ -22,14 +22,14 @@ export function useVaoTaiKhoan() {
   return (nguoi_dung: NguoiDung | null) => {
     const laTrangThai = (k: readonly unknown[]) => k[0] === khoa.toi[0] && k[1] === khoa.toi[1];
     qc.cancelQueries({ predicate: (q) => !laTrangThai(q.queryKey) });
-    qc.setQueryData<TrangThaiDangNhap>(khoa.toi, { nguoi_dung, can_khoi_tao: false });
+    qc.setQueryData<TrangThaiDangNhap>(khoa.toi, { nguoi_dung });
     qc.removeQueries({ predicate: (q) => !laTrangThai(q.queryKey) });
     // Không xóa bộ đệm mutation ở đây: hàm này chạy ngay trong onSuccess của mutation đăng nhập /
     // đăng xuất, xóa lúc đó làm React Query kẹt và các mutation sau (VD bấm Đăng xuất) không chạy nữa
   };
 }
 
-// Đăng nhập / tạo tài khoản xong: báo thành công rồi vào trang hồ sơ
+// Đăng nhập xong: báo thành công rồi vào trang hồ sơ
 function useSauKhiVao() {
   const vao = useVaoTaiKhoan();
   const navigate = useNavigate();
@@ -57,7 +57,7 @@ export function CongDangNhap({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen items-start justify-center bg-slate-50 px-4 pt-[12vh]">
       <div className="the w-full max-w-sm">
-        {data.can_khoi_tao ? <KhoiTao /> : <DangNhap />}
+        <DangNhap />
       </div>
       {/* Thông báo lỗi (sai mật khẩu…) — Layout chưa hiện nên phải đặt ở đây */}
       <Toasts />
@@ -107,49 +107,6 @@ function DangNhap() {
         {dn.isPending ? 'Đang đăng nhập…' : 'Đăng nhập'}
       </button>
       <p className="text-xs text-slate-500">Quên mật khẩu? Nhờ quản trị đặt lại.</p>
-    </form>
-  );
-}
-
-function KhoiTao() {
-  const sauKhiVao = useSauKhiVao();
-  const [f, setF] = useState({ ho_ten: '', ten_dang_nhap: '', email: '', mat_khau: '', nhap_lai: '' });
-  const [loi, setLoi] = useState('');
-  const kt = useMutation({
-    mutationFn: () => api.taiKhoan.khoiTao({ ho_ten: f.ho_ten, ten_dang_nhap: f.ten_dang_nhap, email: f.email, mat_khau: f.mat_khau }),
-    onSuccess: (r) => sauKhiVao(r.nguoi_dung, `Đã tạo tài khoản. Chào ${r.nguoi_dung.ho_ten}!`),
-  });
-  const gui = (e: FormEvent) => {
-    e.preventDefault();
-    if (f.mat_khau !== f.nhap_lai) return setLoi('Hai lần nhập mật khẩu không giống nhau');
-    setLoi('');
-    kt.mutate();
-  };
-  const o = (k: keyof typeof f, nhan: string, them: Partial<JSX.IntrinsicElements['input']> = {}) => (
-    <div>
-      <label className="nhan" htmlFor={`kt-${k}`}>
-        {nhan}
-      </label>
-      <input id={`kt-${k}`} className="o-nhap" required={k !== 'email'} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} {...them} />
-    </div>
-  );
-  return (
-    <form onSubmit={gui} className="space-y-3 p-5">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Tạo tài khoản</h1>
-        <p className="text-sm text-slate-500">
-          Tài khoản đầu tiên là quản trị: nhận toàn bộ dữ liệu đang có và tạo được tài khoản cho người khác.
-        </p>
-      </div>
-      {o('ho_ten', 'Họ tên', { autoFocus: true })}
-      {o('ten_dang_nhap', 'Tên đăng nhập', { autoComplete: 'username', placeholder: 'VD: hien' })}
-      {o('email', 'Email (để lấy lại mật khẩu)', { type: 'email', autoComplete: 'email' })}
-      {o('mat_khau', 'Mật khẩu (ít nhất 6 ký tự)', { type: 'password', autoComplete: 'new-password', minLength: 6 })}
-      {o('nhap_lai', 'Nhập lại mật khẩu', { type: 'password', autoComplete: 'new-password' })}
-      {loi && <p className="text-sm text-red-600">{loi}</p>}
-      <button className="btn-chinh w-full justify-center" disabled={kt.isPending}>
-        {kt.isPending ? 'Đang tạo…' : 'Tạo tài khoản và vào'}
-      </button>
     </form>
   );
 }

@@ -1,12 +1,12 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { chayTrongKhongGian, layKhongGian } from '../db/connection.js';
 import {
-  coNguoiDung,
   congKhai,
   dangNhap,
   doiMatKhau,
   dsNguoiDung,
   khongGianCua,
+  laSieuQuanTri,
   layNguoiDungTheoPhien,
   suaNguoiDung,
   taoNguoiDung,
@@ -73,17 +73,11 @@ function canQuanTri(_req: Request, _res: Response, next: NextFunction) {
 
 export const taiKhoanRouter = Router();
 
-// Trạng thái hiện tại: đang đăng nhập là ai, hoặc app chưa có tài khoản nào (cần khởi tạo)
+// Trạng thái hiện tại: đang đăng nhập là ai. Không có đăng ký: tài khoản do quản trị tạo
+// (siêu quản trị trong .env, hoặc lệnh "npm run tai-khoan" trên máy chủ)
 taiKhoanRouter.get('/toi', (req, res) => {
   const nd = layNguoiDungTheoPhien(docCookie(req, TEN_COOKIE));
-  res.json({ nguoi_dung: nd ? congKhai(nd) : null, can_khoi_tao: !coNguoiDung() });
-});
-
-// Lần đầu (chưa có tài khoản nào): tạo tài khoản quản trị, nhận toàn bộ dữ liệu đang có, rồi vào luôn
-taiKhoanRouter.post('/khoi-tao', (req, res) => {
-  if (coNguoiDung()) throw new LoiApp(409, 'Đã có tài khoản, hãy đăng nhập');
-  const d = z.object({ ten_dang_nhap: zTenDangNhap, ho_ten: zHoTen, email: zEmail, mat_khau: zMatKhau }).parse(req.body);
-  dangNhapVao(req, res, taoNguoiDung({ ...d, la_quan_tri: true }));
+  res.json({ nguoi_dung: nd ? congKhai(nd) : null });
 });
 
 taiKhoanRouter.post('/dang-nhap', (req, res) => {
@@ -97,13 +91,20 @@ taiKhoanRouter.post('/dang-xuat', (req, res) => {
   res.status(204).end();
 });
 
+// Siêu quản trị không có trong DB: đổi tên / mật khẩu trong file .env
+function khongPhaiSieu(_req: Request, _res: Response, next: NextFunction) {
+  if (laSieuQuanTri(layKhongGian()!.nguoiDungId))
+    throw new LoiApp(400, 'Tài khoản siêu quản trị đổi tên / mật khẩu trong file .env trên máy chủ');
+  next();
+}
+
 // Hồ sơ: người dùng tự sửa họ tên, email của mình
-taiKhoanRouter.put('/toi', canDangNhap, (req, res) => {
+taiKhoanRouter.put('/toi', canDangNhap, khongPhaiSieu, (req, res) => {
   const d = z.object({ ho_ten: zHoTen, email: zEmail }).partial().parse(req.body);
   res.json(suaNguoiDung(layKhongGian()!.nguoiDungId, d));
 });
 
-taiKhoanRouter.put('/mat-khau', canDangNhap, (req, res) => {
+taiKhoanRouter.put('/mat-khau', canDangNhap, khongPhaiSieu, (req, res) => {
   const d = z.object({ mat_khau_cu: z.string(), mat_khau_moi: zMatKhau }).parse(req.body);
   doiMatKhau(layKhongGian()!.nguoiDungId, d.mat_khau_cu, d.mat_khau_moi, docCookie(req, TEN_COOKIE)!);
   res.status(204).end();
