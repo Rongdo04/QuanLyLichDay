@@ -35,15 +35,22 @@ export function thongKe(loc: LocThongKe) {
           tiet_moi_buoi: l.tiet_moi_buoi,
           so_buoi_ke_hoach: l.so_buoi_ke_hoach,
           trang_thai: l.trang_thai,
+          da_thanh_toan: l.da_thanh_toan,
           dia_diem_ten: l.dia_diem_ten,
           soNgay: theoLop.get(l.id)!.length,
           ...tinhLop(l, l.tien_dc_dia_diem, theoLop.get(l.id)!),
         }));
-      return { id: t.id, ma: t.ma, ten: t.ten, thue: t.thue, ...congKetQua(lop), lop };
+      return { id: t.id, ma: t.ma, ten: t.ten, thue: t.thue, ...congKetQua(lop), daThanhToan: congKetQua(lop.filter((l) => l.da_thanh_toan)), lop };
     })
     .filter((t) => t.lop.length > 0);
 
-  return { tu: loc.tu ?? null, den: loc.den ?? null, tong: congKetQua(truong), truong };
+  return {
+    tu: loc.tu ?? null,
+    den: loc.den ?? null,
+    tong: congKetQua(truong),
+    daThanhToan: congKetQua(truong.map((t) => t.daThanhToan)),
+    truong,
+  };
 }
 
 // '2026-2027' → 01/09/2026 … 31/08/2027

@@ -231,6 +231,23 @@ describe('API thống kê', () => {
     expect(loc.body.tong).toEqual({ soBuoi: 3, tienDay: 1200, tienDc: 132, tong: 1332, tienThue: 120, tongCoThue: 1452 });
   });
 
+  it('lớp đã thanh toán: tích trên lớp, cộng riêng trong thống kê', async () => {
+    await chuanBi();
+    const ds = (await api().get('/api/lop').expect(200)).body;
+    const gt = ds.find((l: { ten_sheet: string }) => l.ten_sheet === 'TinHọcVPNC');
+    expect(gt.da_thanh_toan).toBe(0);
+    const s = await api().put(`/api/lop/${gt.id}`).send({ da_thanh_toan: true }).expect(200);
+    expect(s.body.da_thanh_toan).toBe(1);
+
+    const { body } = await api().get('/api/thong-ke?tu=2026-10-01&den=2026-10-31').expect(200);
+    expect(body.daThanhToan).toEqual({ soBuoi: 2, tienDay: 700, tienDc: 0, tong: 700, tienThue: 70, tongCoThue: 770 });
+    expect(body.truong.find((t: { ma: string }) => t.ma === 'HN').daThanhToan.tong).toBe(0);
+    expect(body.truong.find((t: { ma: string }) => t.ma === 'GTVT').lop[0].da_thanh_toan).toBe(1);
+
+    const nb = await api().post(`/api/lop/${gt.id}/nhan-ban`).send({}).expect(201);
+    expect(nb.body.da_thanh_toan).toBe(0);
+  });
+
   it('theo tháng × trường', async () => {
     await chuanBi();
     const { body } = await api().get('/api/thong-ke/thang').expect(200);
