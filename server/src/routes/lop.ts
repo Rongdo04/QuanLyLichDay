@@ -6,7 +6,7 @@ import { chiTietLop, dsLop, layLop, nhanBanLop, suaLop, taoLop, xoaLop } from '.
 import { doiLichTheoMau, sinhLichChiTiet, soBuoiDuKien, type DuKien } from '../services/sinhLich.js';
 import { khongTimThay, LoiApp } from '../utils/loi.js';
 import { moTaThu, phanTichLichPhanCong, taoLichPhanCong } from '../utils/lichPhanCong.js';
-import { z, zChuoiTuyChon, zId, zIdThamSo, zNgay, zQueryId, zTenSheet, zTrangThai } from '../utils/zod.js';
+import { z, zChuoiTuyChon, zCo, zId, zIdThamSo, zNgay, zQueryId, zTenSheet, zTrangThai } from '../utils/zod.js';
 
 const zDuKien = z.enum(['S', 'C', 'SC']);
 const zThu = z.enum(['2', '3', '4', '5', '6', '7', '8']);
@@ -34,6 +34,7 @@ const schemaLop = z.object({
   ngay_bat_dau: zNgay.nullish().transform((v) => v ?? null),
   ngay_ket_thuc: zNgay.nullish().transform((v) => v ?? null),
   trang_thai: zTrangThai.default('dang_day'),
+  da_thanh_toan: zCo.optional(),
   thu_tu: z.number().int().min(0).optional(),
 });
 

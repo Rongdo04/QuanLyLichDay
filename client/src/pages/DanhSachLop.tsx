@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import type { TrangThai } from '../api/types';
+import type { LopThongKe, TrangThai } from '../api/types';
 import { BaoLoiTai, DangTai, NhanTrangThai, ThanhTienDo, TieuDeTrang, TrongRong } from '../components/ChungUI';
 import { dinhDangTien, NHAN_TRANG_THAI } from '../lib/format';
 import { useDsLop, useDsTruong } from '../lib/hooks';
@@ -27,6 +27,14 @@ export function TrangDanhSachLop() {
     },
   });
 
+  const thanhToan = useMutation({
+    mutationFn: ({ l, da }: { l: LopThongKe; da: boolean }) => api.lop.sua(l.id, { da_thanh_toan: da }),
+    onSuccess: (l) => {
+      qc.invalidateQueries();
+      thongBao(l.da_thanh_toan ? `"${l.ten_sheet}": trường đã thanh toán` : `"${l.ten_sheet}": bỏ đánh dấu đã thanh toán`);
+    },
+  });
+
   const doiLoc = (k: string, v: string) => {
     const p = new URLSearchParams(params);
     if (v) p.set(k, v);
@@ -44,6 +52,7 @@ export function TrangDanhSachLop() {
     );
   }, [dsLop, truongId, trangThai, tim]);
   const tongTien = ds.reduce((s, l) => s + l.tong, 0);
+  const tienDaTT = ds.reduce((s, l) => s + (l.da_thanh_toan ? l.tong : 0), 0);
 
   return (
     <>
@@ -119,6 +128,7 @@ export function TrangDanhSachLop() {
                 <th className="w-28 text-right">Đơn giá</th>
                 <th className="w-36">Tiến độ</th>
                 <th className="w-32 text-right">Tổng tiền</th>
+                <th className="w-24 text-center">Đã thanh toán</th>
                 <th className="w-28">Trạng thái</th>
                 <th className="w-52" />
               </tr>
@@ -145,6 +155,17 @@ export function TrangDanhSachLop() {
                     <ThanhTienDo da={l.soBuoi} keHoach={l.so_buoi_ke_hoach} />
                   </td>
                   <td className="text-right font-medium tabular-nums">{dinhDangTien(l.tong)}</td>
+                  <td className="text-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 cursor-pointer accent-emerald-600"
+                      aria-label={`Trường đã thanh toán lớp ${l.ten_sheet}`}
+                      title="Tích khi trường đã thanh toán tiền lớp này"
+                      checked={!!l.da_thanh_toan}
+                      disabled={thanhToan.isPending}
+                      onChange={(e) => thanhToan.mutate({ l, da: e.target.checked })}
+                    />
+                  </td>
                   <td>
                     <NhanTrangThai trangThai={l.trang_thai} />
                   </td>
@@ -175,7 +196,10 @@ export function TrangDanhSachLop() {
                   {ds.length} lớp
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{dinhDangTien(tongTien)}</td>
-                <td colSpan={2} />
+                <td className="px-3 py-2 text-center text-xs font-normal text-slate-500" colSpan={2}>
+                  Đã thanh toán {dinhDangTien(tienDaTT)} · còn {dinhDangTien(tongTien - tienDaTT)}
+                </td>
+                <td />
               </tr>
             </tfoot>
           </table>
