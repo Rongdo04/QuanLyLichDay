@@ -25,6 +25,7 @@ export interface Lop {
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
+  da_thanh_toan: number; // 0/1: trường đã thanh toán tiền lớp này
   thu_tu: number;
   tao_luc: string;
 }
@@ -39,8 +40,9 @@ export interface LopDayDu extends Lop {
   tien_dc_dia_diem: number | null;
 }
 
-export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan' | 'so_tiet' | 'tinh_theo' | 'tiet_moi_buoi'> & {
+export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan' | 'so_tiet' | 'tinh_theo' | 'tiet_moi_buoi' | 'da_thanh_toan'> & {
   tinh_theo?: TinhTheo;
+  da_thanh_toan?: number;
   tiet_moi_buoi?: number;
   thu_tu?: number;
   lich_tuan?: string | null;
@@ -131,6 +133,7 @@ export function taoLop(d: DuLieuLop): LopDayDu {
     ...d,
     tinh_theo: d.tinh_theo ?? 'buoi',
     tiet_moi_buoi: d.tiet_moi_buoi ?? layCaiDat().tiet_moi_buoi,
+    da_thanh_toan: d.da_thanh_toan ?? 0,
     thu_tu: d.thu_tu ?? thuTuTiepTheo(d.truong_id),
   });
   return layLop(id)!;
@@ -190,6 +193,7 @@ export function nhanBanLop(id: number, ghiDe: Partial<DuLieuLop> = {}): LopDayDu
     ngay_bat_dau: null,
     ngay_ket_thuc: null,
     trang_thai: 'dang_day',
+    da_thanh_toan: 0,
     ...ghiDe,
   });
 }

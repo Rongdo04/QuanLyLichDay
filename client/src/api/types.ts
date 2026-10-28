@@ -71,6 +71,7 @@ export interface Lop {
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
+  da_thanh_toan: number; // 0/1: trường đã thanh toán
   thu_tu: number;
   tao_luc: string;
   truong_ma: string;
@@ -129,6 +130,7 @@ export interface DuLieuLop {
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
+  da_thanh_toan?: boolean;
   thu_tu?: number;
   lich_tuan?: Record<string, DuKien> | null; // gửi lên dạng object
 }
@@ -188,6 +190,7 @@ export interface LopTrongThongKe extends SoLieuLop {
   tiet_moi_buoi: number;
   so_buoi_ke_hoach: number | null;
   trang_thai: TrangThai;
+  da_thanh_toan: number;
   dia_diem_ten: string | null;
   soNgay: number;
 }
@@ -196,7 +199,8 @@ export interface ThongKe {
   tu: string | null;
   den: string | null;
   tong: TongTien;
-  truong: (TongTien & { id: number; ma: string; ten: string; thue: number; lop: LopTrongThongKe[] })[];
+  daThanhToan: TongTien; // phần của các lớp trường đã thanh toán
+  truong: (TongTien & { id: number; ma: string; ten: string; thue: number; daThanhToan: TongTien; lop: LopTrongThongKe[] })[];
 }
 
 export interface ThongKeThang {

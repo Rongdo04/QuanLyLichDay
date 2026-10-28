@@ -103,7 +103,7 @@ export function TrangTongQuan() {
         <BaoLoiTai loi={error} />
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             <TheSoLieu nhan="Số buổi đã dạy" giaTri={dinhDangSo(tk.tong.soBuoi)} phu={`${soLop} lớp có lịch trong kỳ`} />
             <TheSoLieu nhan="Tiền dạy" giaTri={dinhDangTien(tk.tong.tienDay)} />
             <TheSoLieu nhan="Tiền di chuyển" giaTri={dinhDangTien(tk.tong.tienDc)} />
@@ -112,6 +112,11 @@ export function TrangTongQuan() {
               giaTri={dinhDangTien(tk.tong.tong)}
               phu={tk.tong.tienThue ? `Kể cả thuế: ${dinhDangTien(tk.tong.tongCoThue)}` : undefined}
               noiBat
+            />
+            <TheSoLieu
+              nhan="Trường đã thanh toán"
+              giaTri={dinhDangTien(tk.daThanhToan.tong)}
+              phu={`Còn chờ: ${dinhDangTien(tk.tong.tong - tk.daThanhToan.tong)}`}
             />
           </div>
           <BangTheoTruong tk={tk} />
@@ -156,6 +161,7 @@ function BangTheoTruong({ tk }: { tk: ThongKe }) {
               <th className="w-32 text-right">Tiền DC</th>
               <th className="w-36 text-right">Tổng</th>
               <th className="w-36 text-right">Kể cả thuế</th>
+              <th className="w-36 text-right">Đã thanh toán</th>
             </tr>
           </thead>
           <tbody>
@@ -171,6 +177,7 @@ function BangTheoTruong({ tk }: { tk: ThongKe }) {
               <td className="px-3 py-2 text-right tabular-nums">{dinhDangTien(tk.tong.tienDc)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-blue-700">{dinhDangTien(tk.tong.tong)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{dinhDangTien(tk.tong.tongCoThue)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{dinhDangTien(tk.daThanhToan.tong)}</td>
             </tr>
           </tfoot>
         </table>
@@ -197,6 +204,15 @@ function FragmentTruong({ t, mo, onDoi }: { t: TruongTK; mo: boolean; onDoi: () 
         <td className="text-right tabular-nums">{dinhDangTien(t.tienDc)}</td>
         <td className="text-right font-medium tabular-nums">{dinhDangTien(t.tong)}</td>
         <td className="text-right tabular-nums">{t.tienThue ? dinhDangTien(t.tongCoThue) : '—'}</td>
+        <td className="text-right tabular-nums">
+          {t.lop.every((l) => l.da_thanh_toan) ? (
+            <span className="text-emerald-700">✓ Đủ</span>
+          ) : t.daThanhToan.tong ? (
+            <span className="text-emerald-700">{dinhDangTien(t.daThanhToan.tong)}</span>
+          ) : (
+            <span className="text-slate-400">Chưa</span>
+          )}
+        </td>
       </tr>
       {mo &&
         t.lop.map((l) => (
@@ -212,6 +228,9 @@ function FragmentTruong({ t, mo, onDoi }: { t: TruongTK; mo: boolean; onDoi: () 
             <td className="text-right tabular-nums">{dinhDangTien(l.tienDc)}</td>
             <td className="text-right tabular-nums">{dinhDangTien(l.tong)}</td>
             <td className="text-right tabular-nums">{l.tienThue ? dinhDangTien(l.tongCoThue) : '—'}</td>
+            <td className="text-right">
+              {l.da_thanh_toan ? <span className="text-emerald-700">✓ Đã TT</span> : <span className="text-slate-400">Chưa</span>}
+            </td>
           </tr>
         ))}
     </>
