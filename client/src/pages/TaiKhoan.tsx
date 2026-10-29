@@ -24,6 +24,19 @@ export function TrangTaiKhoan() {
       thongBao(n.bi_khoa ? `Đã khóa ${n.ten_dang_nhap}` : `Đã mở khóa ${n.ten_dang_nhap}`);
     },
   });
+  const xoa = useMutation({
+    mutationFn: (n: NguoiDung) => api.taiKhoan.xoa(n.id),
+    onSuccess: (r, n) => {
+      qc.invalidateQueries({ queryKey: khoa.nguoiDung });
+      thongBao(`Đã xóa tài khoản ${n.ten_dang_nhap}. Dữ liệu cũ được cất ở data/${r.thu_muc_luu.replace(/\\/g, '/')} trên máy chủ`);
+    },
+  });
+  const hoiXoa = (n: NguoiDung) =>
+    confirm(
+      `Xóa tài khoản "${n.ten_dang_nhap}" (${n.ho_ten})?\n\n` +
+        'Người này bị đăng xuất và không đăng nhập được nữa. Toàn bộ lớp, lịch dạy, đề thi của họ sẽ biến mất khỏi app ' +
+        '(bản dữ liệu vẫn được cất trong thư mục data/da-xoa trên máy chủ).',
+    ) && xoa.mutate(n);
 
   if (!toi?.la_quan_tri) return <BaoLoiTai loi={new Error('Chỉ quản trị mới xem được trang này')} />;
   if (isLoading) return <DangTai />;
@@ -45,7 +58,7 @@ export function TrangTaiKhoan() {
               <th>Email</th>
               <th className="w-28">Vai trò</th>
               <th className="w-28">Tạo ngày</th>
-              <th className="w-56" />
+              <th className="w-72" />
             </tr>
           </thead>
           <tbody>
@@ -68,6 +81,16 @@ export function TrangTaiKhoan() {
                     <button className="btn-phu btn-nho" onClick={() => doiKhoa.mutate(n)} disabled={doiKhoa.isPending}>
                       {n.bi_khoa ? 'Mở khóa' : 'Khóa'}
                     </button>
+                  )}{' '}
+                  {n.id !== toi.id && (
+                    <button
+                      className="btn-nguy btn-nho"
+                      disabled={xoa.isPending || !!n.du_lieu_goc}
+                      title={n.du_lieu_goc ? 'Tài khoản này giữ dữ liệu gốc của máy chủ nên không xóa được, chỉ khóa được' : undefined}
+                      onClick={() => hoiXoa(n)}
+                    >
+                      Xóa
+                    </button>
                   )}
                 </td>
               </tr>
@@ -76,8 +99,8 @@ export function TrangTaiKhoan() {
         </table>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Mỗi tài khoản có dữ liệu riêng: trường, lớp, lịch dạy, đề thi, cài đặt và bản sao lưu. Tài khoản mới bắt đầu với danh sách
-        trường, địa điểm mẫu và tự sửa lại cho mình.
+        Mỗi tài khoản có dữ liệu riêng: trường, địa điểm, kỳ học, lớp, lịch dạy, đề thi, cài đặt và bản sao lưu. Tài khoản mới bắt
+        đầu trống và tự nhập trường, địa điểm của mình.
       </p>
 
       <TaoTaiKhoan mo={moTao} onDong={() => setMoTao(false)} />

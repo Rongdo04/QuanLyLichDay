@@ -17,6 +17,32 @@ export const ngayNgan = (ngay: string) => ngay.slice(8, 10) + '/' + ngay.slice(5
 
 export const homNay = () => dayjs().format('YYYY-MM-DD');
 
+// Tên kỳ học theo ngày bắt đầu (giống server): tháng 8–1 → HK1, tháng 2–7 → HK2. '2026-09-05' → 'HK1_2026-2027'
+export function tenKyHoc(ngayBatDau: string): string {
+  const nam = Number(ngayBatDau.slice(0, 4));
+  const thang = Number(ngayBatDau.slice(5, 7));
+  if (thang >= 8) return `HK1_${nam}-${nam + 1}`;
+  return `${thang === 1 ? 'HK1' : 'HK2'}_${nam - 1}-${nam}`;
+}
+
+// Khoảng ngày mặc định của kỳ hiện tại và các kỳ sau (để điền nhanh): HK1 01/08–31/01, HK2 01/02–31/07
+export function cacKyGoiY(soKy = 3): { ngay_bat_dau: string; ngay_ket_thuc: string }[] {
+  const d = dayjs();
+  let nam = d.month() + 1 >= 8 ? d.year() : d.year() - 1; // năm bắt đầu năm học
+  let hk = d.month() + 1 >= 8 || d.month() + 1 === 1 ? 1 : 2;
+  const kq = [];
+  for (let i = 0; i < soKy; i++) {
+    kq.push(
+      hk === 1
+        ? { ngay_bat_dau: `${nam}-08-01`, ngay_ket_thuc: `${nam + 1}-01-31` }
+        : { ngay_bat_dau: `${nam + 1}-02-01`, ngay_ket_thuc: `${nam + 1}-07-31` },
+    );
+    if (hk === 2) nam++;
+    hk = hk === 1 ? 2 : 1;
+  }
+  return kq;
+}
+
 export const dauThang = (thang: string) => `${thang}-01`;
 export const cuoiThang = (thang: string) => dayjs(`${thang}-01`).endOf('month').format('YYYY-MM-DD');
 

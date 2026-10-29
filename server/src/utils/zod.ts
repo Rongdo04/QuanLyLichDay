@@ -27,6 +27,8 @@ const NHAN: Record<string, string> = {
   ngay_ket_thuc: 'Ngày kết thúc',
   trang_thai: 'Trạng thái',
   da_thanh_toan: 'Đã thanh toán',
+  ky_hoc_id: 'Kỳ học',
+  lop_ids: 'Lớp',
   thu_tu: 'Thứ tự',
   lop_id: 'Lớp',
   ngay: 'Ngày',

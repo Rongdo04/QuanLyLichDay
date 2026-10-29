@@ -11,6 +11,7 @@ export interface NguoiDung {
   la_quan_tri: number;
   bi_khoa: number;
   tao_luc: string;
+  du_lieu_goc?: number; // 1: giữ dữ liệu gốc của máy chủ, không xóa được (chỉ có trong danh sách tài khoản)
 }
 
 export interface TrangThaiDangNhap {
@@ -32,6 +33,14 @@ export interface DiaDiem {
   ten_ngan: string;
   ten_day_du: string | null;
   tien_dc: number;
+  so_lop: number;
+}
+
+export interface KyHoc {
+  id: number;
+  ten: string; // tự sinh theo ngày bắt đầu, VD "HK1_2026-2027"
+  ngay_bat_dau: string | null;
+  ngay_ket_thuc: string | null;
   so_lop: number;
 }
 
@@ -71,6 +80,8 @@ export interface Lop {
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
   da_thanh_toan: number; // 0/1: trường đã thanh toán
+  ky_hoc_id: number | null;
+  ky_hoc_ten: string | null;
   thu_tu: number;
   tao_luc: string;
   truong_ma: string;
@@ -130,6 +141,7 @@ export interface DuLieuLop {
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
   da_thanh_toan?: boolean;
+  ky_hoc_id?: number | null; // không gửi khi tạo: server tự xếp theo ngày bắt đầu
   thu_tu?: number;
   lich_tuan?: Record<string, DuKien> | null; // gửi lên dạng object
 }

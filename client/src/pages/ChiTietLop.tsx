@@ -7,7 +7,7 @@ import { BaoLoiTai, DangTai, Modal, NhanTrangThai, ThanhTienDo } from '../compon
 import { ChonThuTrongTuan, docLichTuan, lichTuanGui } from '../components/ChonThuTrongTuan';
 import { TrinhSinhLich } from '../components/TrinhSinhLich';
 import { dinhDangNgay, dinhDangTien, donViGia, NHAN_TRANG_THAI } from '../lib/format';
-import { useDsDiaDiem, useDsLop, useDsTruong } from '../lib/hooks';
+import { useDsDiaDiem, useDsKyHoc, useDsLop, useDsTruong } from '../lib/hooks';
 import { doiLichTheoMau, phanTichLichPhanCong, sinhLichChiTiet, soBuoiTheoDuKien, type LichTheoThu } from '../lib/nghiepVu';
 import { thongBao } from '../lib/thongBao';
 
@@ -28,6 +28,7 @@ interface FormLop {
   ngay_bat_dau: string;
   ngay_ket_thuc: string;
   trang_thai: TrangThai;
+  ky_hoc_id: string; // '' = chưa xếp kỳ
   thu_tu: string;
 }
 
@@ -47,6 +48,7 @@ const formRong = (truongId = ''): FormLop => ({
   ngay_bat_dau: '',
   ngay_ket_thuc: '',
   trang_thai: 'dang_day',
+  ky_hoc_id: '',
   thu_tu: '',
 });
 
@@ -66,6 +68,7 @@ const tuLop = (l: Lop): FormLop => ({
   ngay_bat_dau: l.ngay_bat_dau ?? '',
   ngay_ket_thuc: l.ngay_ket_thuc ?? '',
   trang_thai: l.trang_thai,
+  ky_hoc_id: l.ky_hoc_id ? String(l.ky_hoc_id) : '',
   thu_tu: String(l.thu_tu),
 });
 
@@ -88,6 +91,7 @@ function sangDuLieu(f: FormLop): DuLieuLop {
     ngay_bat_dau: f.ngay_bat_dau || null,
     ngay_ket_thuc: f.ngay_ket_thuc || null,
     trang_thai: f.trang_thai,
+    ky_hoc_id: f.ky_hoc_id ? Number(f.ky_hoc_id) : null,
     ...(f.thu_tu !== '' ? { thu_tu: Number(f.thu_tu) } : {}),
   };
 }
@@ -123,8 +127,11 @@ function ChiTietLop({ id }: { id: number | null }) {
   });
   const { data: dsTruong } = useDsTruong();
   const { data: dsDiaDiem } = useDsDiaDiem();
+  const { data: dsKy } = useDsKyHoc();
   const { data: dsLop } = useDsLop();
-  const [form, setForm] = useState<FormLop | null>(laMoi ? formRong(params.get('truong') ?? '') : null);
+  const [form, setForm] = useState<FormLop | null>(
+    laMoi ? { ...formRong(params.get('truong') ?? ''), ky_hoc_id: params.get('ky') ?? '' } : null,
+  );
   const [moSinhLich, setMoSinhLich] = useState(params.get('sinh-lich') === '1');
   // Các ô người dùng đã sửa mà chưa lưu
   const daSua = useRef(new Set<keyof FormLop>());
@@ -286,6 +293,11 @@ function ChiTietLop({ id }: { id: number | null }) {
         }
         if (!form.dia_diem_id && ganNhat.dia_diem_id) moi.dia_diem_id = String(ganNhat.dia_diem_id);
       }
+    }
+    // Lớp mới: chọn ngày bắt đầu thì tự chọn kỳ chứa ngày đó (nếu chưa chọn kỳ bằng tay)
+    if (laMoi && k === 'ngay_bat_dau' && v && !daSua.current.has('ky_hoc_id')) {
+      const kyChua = dsKy?.find((ky) => ky.ngay_bat_dau && ky.ngay_bat_dau <= v && (!ky.ngay_ket_thuc || ky.ngay_ket_thuc >= v));
+      if (kyChua) moi.ky_hoc_id = String(kyChua.id);
     }
     setForm(moi);
   };
@@ -501,6 +513,31 @@ function ChiTietLop({ id }: { id: number | null }) {
                 ))}
               </select>
             </O>
+            <O
+              nhan="Kỳ học"
+              id="ky-hoc"
+              goiY={
+                dsKy?.length ? (
+                  laMoi ? 'Tự chọn theo ngày bắt đầu, vẫn đổi được' : undefined
+                ) : (
+                  <>
+                    Chưa có kỳ học nào.{' '}
+                    <Link className="lien-ket" to="/ky-hoc">
+                      Tạo kỳ học
+                    </Link>
+                  </>
+                )
+              }
+            >
+              <select id="ky-hoc" className="o-nhap" value={form.ky_hoc_id} onChange={(e) => doi('ky_hoc_id', e.target.value)}>
+                <option value="">Chưa xếp kỳ</option>
+                {dsKy?.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.ten}
+                  </option>
+                ))}
+              </select>
+            </O>
             <O nhan="Thứ tự sheet" id="thu-tu" goiY={laMoi ? 'Để trống = cuối cùng' : undefined}>
               <input id="thu-tu" type="number" min={0} className="o-nhap" value={form.thu_tu} onChange={(e) => doi('thu_tu', e.target.value)} />
             </O>
@@ -694,7 +731,7 @@ function MoTaDoiLich({ kq }: { kq: ReturnType<typeof doiLichTheoMau> }) {
   );
 }
 
-function O({ nhan, id, goiY, loi, children }: { nhan: string; id: string; goiY?: string; loi?: boolean; children: ReactNode }) {
+function O({ nhan, id, goiY, loi, children }: { nhan: string; id: string; goiY?: ReactNode; loi?: boolean; children: ReactNode }) {
   return (
     <div>
       <label className="nhan" htmlFor={id}>
