@@ -5,6 +5,7 @@ import { tinhLop } from './nghiepVu';
 
 export const useDsTruong = () => useQuery({ queryKey: khoa.truong, queryFn: api.truong.ds });
 export const useDsDiaDiem = () => useQuery({ queryKey: khoa.diaDiem, queryFn: api.diaDiem.ds });
+export const useDsKyHoc = () => useQuery({ queryKey: khoa.kyHoc, queryFn: api.kyHoc.ds });
 export const useDsLop = () => useQuery({ queryKey: khoa.dsLop(), queryFn: () => api.lop.ds() });
 
 // Tick sáng/chiều, sửa ghi chú, bật/tắt tiền DC: cập nhật giao diện ngay (optimistic),

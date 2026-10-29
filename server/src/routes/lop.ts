@@ -35,6 +35,7 @@ const schemaLop = z.object({
   ngay_ket_thuc: zNgay.nullish().transform((v) => v ?? null),
   trang_thai: zTrangThai.default('dang_day'),
   da_thanh_toan: zCo.optional(),
+  ky_hoc_id: zId.nullish(), // không gửi: tự xếp theo ngày bắt đầu; null: chưa xếp kỳ
   thu_tu: z.number().int().min(0).optional(),
 });
 

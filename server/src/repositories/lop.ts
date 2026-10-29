@@ -4,6 +4,7 @@ import { tinhLop, type KetQuaLop, type TinhTheo } from '../services/tinhTien.js'
 import { layCaiDat } from './caiDat.js';
 import { buoiCuaLop, type Buoi } from './buoi.js';
 import { capNhat, chen, xoa } from './chung.js';
+import { kyHocCuaNgay } from './kyHoc.js';
 
 export type TrangThai = 'dang_day' | 'hoan_thanh' | 'tam_dung';
 
@@ -26,6 +27,7 @@ export interface Lop {
   ngay_ket_thuc: string | null;
   trang_thai: TrangThai;
   da_thanh_toan: number; // 0/1: trường đã thanh toán tiền lớp này
+  ky_hoc_id: number | null;
   thu_tu: number;
   tao_luc: string;
 }
@@ -38,10 +40,12 @@ export interface LopDayDu extends Lop {
   dia_diem_ten: string | null;
   dia_diem_ten_day_du: string | null;
   tien_dc_dia_diem: number | null;
+  ky_hoc_ten: string | null;
 }
 
-export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan' | 'so_tiet' | 'tinh_theo' | 'tiet_moi_buoi' | 'da_thanh_toan'> & {
+export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan' | 'so_tiet' | 'tinh_theo' | 'tiet_moi_buoi' | 'da_thanh_toan' | 'ky_hoc_id'> & {
   tinh_theo?: TinhTheo;
+  ky_hoc_id?: number | null; // bỏ trống khi tạo: tự xếp theo ngày bắt đầu
   da_thanh_toan?: number;
   tiet_moi_buoi?: number;
   thu_tu?: number;
@@ -51,10 +55,12 @@ export type DuLieuLop = Omit<Lop, 'id' | 'tao_luc' | 'thu_tu' | 'lich_tuan' | 's
 
 const SQL_LOP = `
   SELECT l.*, t.ma AS truong_ma, t.ten AS truong_ten, t.thue AS thue_truong,
-         d.ten_ngan AS dia_diem_ten, d.ten_day_du AS dia_diem_ten_day_du, d.tien_dc AS tien_dc_dia_diem
+         d.ten_ngan AS dia_diem_ten, d.ten_day_du AS dia_diem_ten_day_du, d.tien_dc AS tien_dc_dia_diem,
+         k.ten AS ky_hoc_ten
   FROM lop l
   JOIN truong t ON t.id = l.truong_id
-  LEFT JOIN dia_diem d ON d.id = l.dia_diem_id`;
+  LEFT JOIN dia_diem d ON d.id = l.dia_diem_id
+  LEFT JOIN ky_hoc k ON k.id = l.ky_hoc_id`;
 
 export interface LocLop {
   truongId?: number;
@@ -117,6 +123,8 @@ function kiemTraThamChieu(d: Partial<DuLieuLop>) {
     throw new LoiApp(400, 'Trường không tồn tại');
   if (d.dia_diem_id != null && !db.prepare('SELECT 1 FROM dia_diem WHERE id = ?').get(d.dia_diem_id))
     throw new LoiApp(400, 'Địa điểm không tồn tại');
+  if (d.ky_hoc_id != null && !db.prepare('SELECT 1 FROM ky_hoc WHERE id = ?').get(d.ky_hoc_id))
+    throw new LoiApp(400, 'Kỳ học không tồn tại');
 }
 
 function thuTuTiepTheo(truongId: number): number {
@@ -134,6 +142,7 @@ export function taoLop(d: DuLieuLop): LopDayDu {
     tinh_theo: d.tinh_theo ?? 'buoi',
     tiet_moi_buoi: d.tiet_moi_buoi ?? layCaiDat().tiet_moi_buoi,
     da_thanh_toan: d.da_thanh_toan ?? 0,
+    ky_hoc_id: d.ky_hoc_id !== undefined ? d.ky_hoc_id : d.ngay_bat_dau ? (kyHocCuaNgay(d.ngay_bat_dau)?.id ?? null) : null,
     thu_tu: d.thu_tu ?? thuTuTiepTheo(d.truong_id),
   });
   return layLop(id)!;
@@ -194,6 +203,7 @@ export function nhanBanLop(id: number, ghiDe: Partial<DuLieuLop> = {}): LopDayDu
     ngay_ket_thuc: null,
     trang_thai: 'dang_day',
     da_thanh_toan: 0,
+    ky_hoc_id: l.ky_hoc_id, // học phần mới của cùng lớp: thường cùng kỳ
     ...ghiDe,
   });
 }

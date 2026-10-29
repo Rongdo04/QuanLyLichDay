@@ -13,6 +13,7 @@ import { TrangDeThi } from './pages/DeThi';
 import { TrangDiaDiem } from './pages/DiaDiem';
 import { TrangExcel } from './pages/Excel';
 import { TrangHoSo } from './pages/HoSo';
+import { TrangKyHoc } from './pages/KyHoc';
 import { TrangTaiKhoan } from './pages/TaiKhoan';
 import { TrangTongQuan } from './pages/TongQuan';
 import { TrangTruong } from './pages/Truong';
@@ -38,6 +39,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="lop" element={<TrangDanhSachLop />} />
               <Route path="lop/moi" element={<TrangChiTietLop />} />
               <Route path="lop/:id" element={<TrangChiTietLop />} />
+              <Route path="ky-hoc" element={<TrangKyHoc />} />
               <Route path="truong" element={<TrangTruong />} />
               <Route path="dia-diem" element={<TrangDiaDiem />} />
               <Route path="excel" element={<TrangExcel />} />
