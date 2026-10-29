@@ -23,6 +23,7 @@ import type {
   BuoiDayDu,
   CaiDat,
   DiaDiem,
+  KyHoc,
   DuLieuLop,
   KetQuaNhap,
   KetQuaPhanTich,
@@ -63,6 +64,7 @@ export interface LocThongKe {
 export const khoa = {
   truong: ['truong'] as const,
   diaDiem: ['dia-diem'] as const,
+  kyHoc: ['ky-hoc'] as const,
   dsLop: (loc: LocLop = {}) => ['lop', 'ds', loc] as const,
   lop: (id: number) => ['lop', 'ct', id] as const,
   buoi: (loc: LocBuoi) => ['buoi', loc] as const,
@@ -93,6 +95,8 @@ type DuLieuMauDe = { ten: string; truong_id: number | null; cau_truc: number[]; 
 
 type DuLieuTruong = Pick<Truong, 'ma' | 'ten' | 'ghi_chu'> & { da_an?: number };
 type DuLieuDiaDiem = Pick<DiaDiem, 'ten_ngan' | 'ten_day_du' | 'tien_dc'>;
+// Tên kỳ server tự sinh theo ngày bắt đầu
+type DuLieuKyHoc = { ngay_bat_dau: string; ngay_ket_thuc: string | null };
 
 type DuLieuNguoiDungMoi = { ten_dang_nhap: string; ho_ten: string; email?: string; mat_khau: string; la_quan_tri?: boolean };
 
@@ -109,6 +113,7 @@ export const api = {
     tao: (d: DuLieuNguoiDungMoi) => goiApi<NguoiDung>('/tai-khoan/nguoi-dung', { json: d }),
     sua: (id: number, d: { ho_ten?: string; email?: string; mat_khau?: string; bi_khoa?: boolean; la_quan_tri?: boolean }) =>
       goiApi<NguoiDung>(`/tai-khoan/nguoi-dung/${id}`, { method: 'PUT', json: d }),
+    xoa: (id: number) => goiApi<{ thu_muc_luu: string }>(`/tai-khoan/nguoi-dung/${id}`, { method: 'DELETE' }),
   },
   truong: {
     ds: () => goiApi<Truong[]>('/truong'),
@@ -121,6 +126,13 @@ export const api = {
     tao: (d: DuLieuDiaDiem) => goiApi<DiaDiem>('/dia-diem', { json: d }),
     sua: (id: number, d: Partial<DuLieuDiaDiem>) => goiApi<DiaDiem>(`/dia-diem/${id}`, { method: 'PUT', json: d }),
     xoa: (id: number) => goiApi<void>(`/dia-diem/${id}`, { method: 'DELETE' }),
+  },
+  kyHoc: {
+    ds: () => goiApi<KyHoc[]>('/ky-hoc'),
+    tao: (d: DuLieuKyHoc) => goiApi<KyHoc>('/ky-hoc', { json: d }),
+    sua: (id: number, d: Partial<DuLieuKyHoc>) => goiApi<KyHoc>(`/ky-hoc/${id}`, { method: 'PUT', json: d }),
+    xoa: (id: number) => goiApi<void>(`/ky-hoc/${id}`, { method: 'DELETE' }),
+    themLop: (id: number, lopIds: number[]) => goiApi<{ so_lop: number }>(`/ky-hoc/${id}/lop`, { json: { lop_ids: lopIds } }),
   },
   lop: {
     ds: (loc: LocLop = {}) => goiApi<LopThongKe[]>(`/lop${chuoiQuery({ ...loc })}`),

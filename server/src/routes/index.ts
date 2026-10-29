@@ -3,6 +3,7 @@ import { buoiRouter } from './buoi.js';
 import { caiDatRouter } from './caiDat.js';
 import { aiRouter, deThiRouter, mauDeRouter } from './deThi.js';
 import { diaDiemRouter } from './diaDiem.js';
+import { kyHocRouter } from './kyHoc.js';
 import { lopRouter } from './lop.js';
 import { cauHoiRouter, monRouter } from './mon.js';
 import { nhapRouter } from './nhap.js';
@@ -23,6 +24,7 @@ export function taoApiRouter({ boQuaDangNhap = false } = {}) {
   if (!boQuaDangNhap) apiRouter.use(canDangNhap);
   apiRouter.use('/truong', truongRouter);
   apiRouter.use('/dia-diem', diaDiemRouter);
+  apiRouter.use('/ky-hoc', kyHocRouter);
   apiRouter.use('/lop', lopRouter);
   apiRouter.use('/buoi', buoiRouter);
   apiRouter.use('/thong-ke', thongKeRouter);

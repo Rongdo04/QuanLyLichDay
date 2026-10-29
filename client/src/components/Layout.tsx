@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, khoa } from '../api';
+import { useDsKyHoc } from '../lib/hooks';
 import { thongBao } from '../lib/thongBao';
 import { useNguoiDung, useVaoTaiKhoan } from './CongDangNhap';
 import { Toasts } from './Toasts';
@@ -15,6 +17,59 @@ const MENU = [
   { to: '/de-thi', nhan: 'Đề thi' },
   { to: '/cai-dat', nhan: 'Cài đặt' },
 ];
+
+const lopMenu = (dangChon: boolean) =>
+  `block rounded-md px-3 py-2 text-sm ${dangChon ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-700 hover:bg-slate-100'}`;
+
+const lopMenuCon = (dangChon: boolean) =>
+  `flex items-center justify-between gap-2 rounded-md py-1.5 pl-6 pr-3 text-sm ${
+    dangChon ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-600 hover:bg-slate-100'
+  }`;
+
+// "Lớp học" mở ra các kỳ học: chọn một kỳ thì trang Lớp học chỉ hiện lớp của kỳ đó (/lop?ky=<id>)
+function MenuLopHoc() {
+  const { pathname, search } = useLocation();
+  const ky = new URLSearchParams(search).get('ky') ?? '';
+  const trongMuc = pathname === '/lop' || pathname === '/ky-hoc';
+  const [mo, setMo] = useState(trongMuc);
+  const { data: dsKy } = useDsKyHoc();
+  useEffect(() => {
+    if (trongMuc) setMo(true);
+  }, [trongMuc]);
+
+  const con = (den: string, nhan: string, dangChon: boolean, soLop?: number) => (
+    <Link key={den} to={den} className={lopMenuCon(dangChon)}>
+      <span className="truncate">{nhan}</span>
+      {soLop !== undefined && <span className="shrink-0 text-xs tabular-nums text-slate-400">{soLop}</span>}
+    </Link>
+  );
+
+  return (
+    <div>
+      <div className="flex items-center">
+        <Link to="/lop" className={`flex-1 ${lopMenu(pathname === '/lop' && !ky)}`} onClick={() => setMo(true)}>
+          Lớp học
+        </Link>
+        <button
+          type="button"
+          className="rounded-md px-2 py-2 text-slate-500 hover:bg-slate-100"
+          aria-label={mo ? 'Thu gọn kỳ học' : 'Mở danh sách kỳ học'}
+          aria-expanded={mo}
+          onClick={() => setMo(!mo)}
+        >
+          <span className={`inline-block text-xs transition-transform ${mo ? 'rotate-90' : ''}`}>▶</span>
+        </button>
+      </div>
+      {mo && (
+        <div className="mt-0.5 space-y-0.5">
+          {dsKy?.map((k) => con(`/lop?ky=${k.id}`, k.ten, pathname === '/lop' && ky === String(k.id), k.so_lop))}
+          {con('/lop?ky=chua', 'Chưa xếp kỳ', pathname === '/lop' && ky === 'chua')}
+          {con('/ky-hoc', dsKy?.length ? 'Quản lý kỳ học' : '+ Tạo kỳ học', pathname === '/ky-hoc')}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Layout() {
   const { data: caiDat } = useQuery({ queryKey: khoa.caiDat, queryFn: api.caiDat.lay });
@@ -40,20 +95,15 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-          {menu.map((m) => (
-            <NavLink
-              key={m.to}
-              to={m.to}
-              end={m.end}
-              className={({ isActive }) =>
-                `block rounded-md px-3 py-2 text-sm ${
-                  isActive ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-700 hover:bg-slate-100'
-                }`
-              }
-            >
-              {m.nhan}
-            </NavLink>
-          ))}
+          {menu.map((m) =>
+            m.to === '/lop' ? (
+              <MenuLopHoc key={m.to} />
+            ) : (
+              <NavLink key={m.to} to={m.to} end={m.end} className={({ isActive }) => lopMenu(isActive)}>
+                {m.nhan}
+              </NavLink>
+            ),
+          )}
         </nav>
         <div className="space-y-1.5 border-t border-slate-200 px-4 py-3 text-xs">
           {toi && (

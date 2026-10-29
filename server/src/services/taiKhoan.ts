@@ -169,8 +169,11 @@ export function coNguoiDung(): boolean {
   return !!heThong().prepare('SELECT 1 FROM nguoi_dung LIMIT 1').get();
 }
 
-export function dsNguoiDung(): NguoiDungCongKhai[] {
-  return heThong().prepare(`SELECT ${COT_CONG_KHAI} FROM nguoi_dung ORDER BY id`).all() as NguoiDungCongKhai[];
+// du_lieu_goc = 1: tài khoản giữ data/giangday.db (không xóa được, xem xoaNguoiDung)
+export function dsNguoiDung(): (NguoiDungCongKhai & { du_lieu_goc: number })[] {
+  return heThong()
+    .prepare(`SELECT ${COT_CONG_KHAI}, (thu_muc = '') AS du_lieu_goc FROM nguoi_dung ORDER BY id`)
+    .all() as (NguoiDungCongKhai & { du_lieu_goc: number })[];
 }
 
 export function layNguoiDung(id: number): NguoiDung | undefined {
@@ -216,13 +219,17 @@ export function taoNguoiDung(d: {
   return nd;
 }
 
-// DB mới: tạo bảng + dữ liệu mẫu (trường, địa điểm, mẫu đề), xóa thông tin giáo viên của người khác
-function khoiTaoDuLieuMoi(db: Database.Database, hoTen: string) {
+// DB mới: migration có sẵn dữ liệu của người dùng đầu tiên. Người mới tự nhập trường, địa điểm của mình:
+// bỏ thông tin giáo viên, trường, địa điểm và mẫu đề gắn với các trường đó; giữ mẫu đề chung
+export function khoiTaoDuLieuMoi(db: Database.Database, hoTen: string) {
   const ghi = db.prepare('INSERT INTO cai_dat (khoa, gia_tri) VALUES (?, ?) ON CONFLICT(khoa) DO UPDATE SET gia_tri = excluded.gia_tri');
   db.transaction(() => {
     ghi.run('ten_gv', hoTen);
     ghi.run('ma_gv', '');
     ghi.run('sdt', '');
+    db.prepare('DELETE FROM mau_de WHERE truong_id IS NOT NULL').run();
+    db.prepare('DELETE FROM truong').run();
+    db.prepare('DELETE FROM dia_diem').run();
   })();
 }
 
@@ -256,6 +263,31 @@ export function suaNguoiDung(
   const sau = layNguoiDung(id)!;
   if (khongGianDaMo.has(id)) khongGianDaMo.get(id)!.laQuanTri = !!sau.la_quan_tri;
   return congKhai(sau);
+}
+
+// Xóa tài khoản: đăng xuất mọi nơi, đóng DB, chuyển thư mục dữ liệu vào data/da-xoa/ (khôi phục được bằng tay).
+// Không xóa tài khoản giữ dữ liệu gốc (data/giangday.db): thư mục đó chứa cả dữ liệu hệ thống
+export function xoaNguoiDung(id: number): { thu_muc_luu: string } {
+  const db = heThong();
+  const nd = layNguoiDung(id);
+  if (!nd) throw new LoiApp(404, 'Không tìm thấy người dùng');
+  if (!nd.thu_muc) throw new LoiApp(400, 'Tài khoản này giữ dữ liệu gốc (data/giangday.db) nên không xóa được. Hãy khóa tài khoản thay vì xóa');
+  if (nd.la_quan_tri && !nd.bi_khoa) {
+    const soQuanTri = (db.prepare('SELECT count(*) AS n FROM nguoi_dung WHERE la_quan_tri = 1 AND bi_khoa = 0').get() as { n: number }).n;
+    if (soQuanTri <= 1 && !sieuQuanTri()) throw new LoiApp(400, 'Phải còn ít nhất một quản trị đang hoạt động');
+  }
+  const kg = khongGianDaMo.get(id);
+  if (kg && kg.db !== layDbMacDinh()) kg.db.close();
+  khongGianDaMo.delete(id);
+  db.prepare('DELETE FROM nguoi_dung WHERE id = ?').run(id); // phiên đăng nhập xóa theo (ON DELETE CASCADE)
+
+  const goc = path.resolve(DATA_DIR, nd.thu_muc);
+  const luu = path.join(DATA_DIR, 'da-xoa', `${nd.ten_dang_nhap}-${id}-${Date.now()}`);
+  if (fs.existsSync(goc)) {
+    fs.mkdirSync(path.dirname(luu), { recursive: true });
+    fs.renameSync(goc, luu);
+  }
+  return { thu_muc_luu: path.relative(DATA_DIR, luu) };
 }
 
 // Người dùng tự đổi mật khẩu: cần mật khẩu cũ; giữ phiên hiện tại, đăng xuất các nơi khác
@@ -405,7 +437,7 @@ export function khongGianCua(nd: NguoiDung): KhongGian {
     const db = duongDan === path.resolve(DB_PATH) ? layDbMacDinh() : moDb(duongDan);
     // Siêu quản trị không đi qua taoNguoiDung: khởi tạo dữ liệu lần đầu mở
     if (moi && laSieuQuanTri(nd.id)) khoiTaoDuLieuMoi(db, nd.ho_ten);
-    kg ={ nguoiDungId: nd.id, laQuanTri: !!nd.la_quan_tri, db, thuMuc };
+    kg = { nguoiDungId: nd.id, laQuanTri: !!nd.la_quan_tri, db, thuMuc };
     khongGianDaMo.set(nd.id, kg);
   }
   return kg;

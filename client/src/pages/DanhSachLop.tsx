@@ -4,18 +4,31 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import type { LopThongKe, TrangThai } from '../api/types';
 import { BaoLoiTai, DangTai, NhanTrangThai, ThanhTienDo, TieuDeTrang, TrongRong } from '../components/ChungUI';
-import { dinhDangTien, NHAN_TRANG_THAI } from '../lib/format';
-import { useDsLop, useDsTruong } from '../lib/hooks';
+import { dinhDangNgay, dinhDangTien, NHAN_TRANG_THAI } from '../lib/format';
+import { useDsKyHoc, useDsLop, useDsTruong } from '../lib/hooks';
 import { thongBao } from '../lib/thongBao';
+
+// Thêm lớp từ danh sách đang lọc: điền sẵn trường và kỳ học
+function thamSoLopMoi(truongId: string, kyId?: number) {
+  const p = new URLSearchParams();
+  if (truongId) p.set('truong', truongId);
+  if (kyId) p.set('ky', String(kyId));
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
 
 export function TrangDanhSachLop() {
   const [params, setParams] = useSearchParams();
   const truongId = params.get('truong') ?? '';
   const trangThai = (params.get('trang-thai') ?? '') as TrangThai | '';
+  const ky = params.get('ky') ?? ''; // id kỳ học, 'chua' = chưa xếp kỳ (chọn ở menu trái)
   const [tim, setTim] = useState('');
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: dsTruong } = useDsTruong();
+  const { data: dsKy } = useDsKyHoc();
+  const kyDangXem = dsKy?.find((k) => String(k.id) === ky);
+  const tenKy = ky === 'chua' ? 'Chưa xếp kỳ' : kyDangXem?.ten;
   const { data: dsLop, isLoading, error } = useDsLop();
 
   const nhanBan = useMutation({
@@ -46,18 +59,30 @@ export function TrangDanhSachLop() {
     const t = tim.trim().toLowerCase();
     return (dsLop ?? []).filter(
       (l) =>
+        (!ky || (ky === 'chua' ? l.ky_hoc_id == null : l.ky_hoc_id === Number(ky))) &&
         (!truongId || l.truong_id === Number(truongId)) &&
         (!trangThai || l.trang_thai === trangThai) &&
         (!t || [l.ten_sheet, l.hoc_phan, l.ma_lop ?? '', l.lop_van_hoa ?? ''].some((s) => s.toLowerCase().includes(t))),
     );
-  }, [dsLop, truongId, trangThai, tim]);
+  }, [dsLop, ky, truongId, trangThai, tim]);
   const tongTien = ds.reduce((s, l) => s + l.tong, 0);
   const tienDaTT = ds.reduce((s, l) => s + (l.da_thanh_toan ? l.tong : 0), 0);
 
   return (
     <>
-      <TieuDeTrang tieuDe="Lớp học" phu="Mỗi lớp + học phần tương ứng một sheet trong file Excel nộp cho trường.">
-        <Link className="btn-chinh" to={`/lop/moi${truongId ? `?truong=${truongId}` : ''}`}>
+      <TieuDeTrang
+        tieuDe={tenKy ? `Lớp học · ${tenKy}` : 'Lớp học'}
+        phu={
+          kyDangXem
+            ? kyDangXem.ngay_bat_dau || kyDangXem.ngay_ket_thuc
+              ? `Từ ${dinhDangNgay(kyDangXem.ngay_bat_dau) || '…'} đến ${dinhDangNgay(kyDangXem.ngay_ket_thuc) || '…'}`
+              : 'Các lớp đã xếp vào kỳ này.'
+            : ky === 'chua'
+              ? 'Các lớp chưa thuộc kỳ học nào. Mở lớp, chọn kỳ học để xếp.'
+              : 'Mỗi lớp + học phần tương ứng một sheet trong file Excel nộp cho trường.'
+        }
+      >
+        <Link className="btn-chinh" to={`/lop/moi${thamSoLopMoi(truongId, kyDangXem?.id)}`}>
           + Thêm lớp
         </Link>
       </TieuDeTrang>
@@ -144,6 +169,7 @@ export function TrangDanhSachLop() {
                       {l.hoc_phan}
                       {l.ma_lop && ` · ${l.ma_lop}`}
                       {l.dia_diem_ten && ` · ${l.dia_diem_ten}`}
+                      {!ky && l.ky_hoc_ten && ` · ${l.ky_hoc_ten}`}
                     </div>
                   </td>
                   <td title={l.truong_ten}>{l.truong_ma}</td>

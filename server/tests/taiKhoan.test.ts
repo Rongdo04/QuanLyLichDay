@@ -177,7 +177,8 @@ describe('siêu quản trị (.env)', () => {
     expect((await s.get('/api/tai-khoan/toi')).body.nguoi_dung).toMatchObject({ ten_dang_nhap: 'admin', la_quan_tri: 1 });
     await s.post('/api/tai-khoan/nguoi-dung').send({ ten_dang_nhap: 'lan', ho_ten: 'Lan', mat_khau: 'matkhau2' }).expect(201);
     await s.post('/api/tai-khoan/nguoi-dung').send({ ten_dang_nhap: 'admin', ho_ten: 'Giả', mat_khau: 'matkhau2' }).expect(409);
-    await s.post('/api/lop').send(lopMau).expect(201);
+    const truong = (await s.post('/api/truong').send({ ma: 'SQT', ten: 'Trường của siêu quản trị' }).expect(201)).body;
+    await s.post('/api/lop').send({ ...lopMau, truong_id: truong.id }).expect(201);
     const lan = request.agent(app);
     await lan.post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'lan', mat_khau: 'matkhau2' }).expect(200);
     expect((await lan.get('/api/lop')).body).toHaveLength(0);
@@ -189,8 +190,11 @@ describe('siêu quản trị (.env)', () => {
     await qt.post('/api/lop').send(lopMau).expect(201);
     const s = await vaoSieu();
     expect((await s.get('/api/lop')).body).toHaveLength(0);
-    await s.post('/api/lop').send({ ...lopMau, ten_sheet: 'Cua_sieu' }).expect(201);
-    await s.post('/api/lop').send({ ...lopMau, ten_sheet: 'Cua_sieu_2' }).expect(201);
+    expect((await s.get('/api/truong')).body).toHaveLength(0);
+    const truong = (await s.post('/api/truong').send({ ma: 'SQT', ten: 'Trường của siêu quản trị' }).expect(201)).body;
+    await s.post('/api/lop').send({ ...lopMau, truong_id: truong.id, ten_sheet: 'Cua_sieu' }).expect(201);
+    await s.post('/api/lop').send({ ...lopMau, truong_id: truong.id, ten_sheet: 'Cua_sieu_2' }).expect(201);
+    expect((await qt.get('/api/truong')).body.map((t: { ma: string }) => t.ma)).not.toContain('SQT');
     expect((await qt.get('/api/lop')).body).toHaveLength(1);
     expect((await s.get('/api/lop')).body).toHaveLength(2);
     expect((await s.get('/api/cai-dat')).body.ten_gv).toBe('Siêu quản trị');
@@ -226,6 +230,13 @@ describe('tách dữ liệu', () => {
     // Người mới: thông tin giáo viên là của chính họ, không phải của quản trị
     const caiDat = (await ban.get('/api/cai-dat').expect(200)).body;
     expect(caiDat).toMatchObject({ ten_gv: 'Nguyễn Thị Lan', ma_gv: '', sdt: '' });
+    // Trường, địa điểm của người mới bắt đầu trống (không mang theo của quản trị); chỉ còn mẫu đề chung
+    expect(maBan).toEqual(['XYZ']);
+    expect((await ban.get('/api/dia-diem')).body).toHaveLength(0);
+    const mauDe = (await ban.get('/api/mau-de')).body.mau as { truong_id: number | null }[];
+    expect(mauDe.length).toBeGreaterThan(0);
+    expect(mauDe.every((m) => m.truong_id === null)).toBe(true);
+    expect((await qt.get('/api/dia-diem')).body.length).toBeGreaterThan(0);
     expect(fs.existsSync(path.join(thuMucTam, 'nguoi-dung', '2', 'giangday.db'))).toBe(true);
   });
 
@@ -277,6 +288,30 @@ describe('quản trị', () => {
   it('không tự khóa mình', async () => {
     const { qt } = await chuanBi();
     await qt.put('/api/tai-khoan/nguoi-dung/1').send({ bi_khoa: true }).expect(400);
+  });
+
+  it('xóa tài khoản: đăng xuất, không đăng nhập lại được, dữ liệu chuyển vào data/da-xoa', async () => {
+    const { qt, ban } = await chuanBi();
+    await ban.delete('/api/tai-khoan/nguoi-dung/1').expect(403); // người thường không xóa được ai
+    await ban.get('/api/lop').expect(200);
+    const r = await qt.delete('/api/tai-khoan/nguoi-dung/2').expect(200);
+    expect(r.body.thu_muc_luu).toMatch(/^da-xoa[\\/]lan-2-\d+$/);
+    expect(fs.existsSync(path.join(thuMucTam, 'nguoi-dung', '2'))).toBe(false);
+    expect(fs.existsSync(path.join(thuMucTam, r.body.thu_muc_luu, 'giangday.db'))).toBe(true);
+    await ban.get('/api/lop').expect(401);
+    await request(app).post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'lan', mat_khau: 'matkhau2' }).expect(401);
+    expect((await qt.get('/api/tai-khoan/nguoi-dung')).body.map((n: { ten_dang_nhap: string }) => n.ten_dang_nhap)).toEqual(['hien']);
+    await qt.delete('/api/tai-khoan/nguoi-dung/2').expect(404);
+  });
+
+  it('không tự xóa mình; không xóa tài khoản giữ dữ liệu gốc', async () => {
+    const { qt } = await chuanBi();
+    await qt.delete('/api/tai-khoan/nguoi-dung/1').expect(400);
+    await qt.put('/api/tai-khoan/nguoi-dung/2').send({ la_quan_tri: true }).expect(200);
+    const lan = request.agent(app);
+    await lan.post('/api/tai-khoan/dang-nhap').send({ ten_dang_nhap: 'lan', mat_khau: 'matkhau2' }).expect(200);
+    const r = await lan.delete('/api/tai-khoan/nguoi-dung/1').expect(400);
+    expect(r.body.loi).toContain('dữ liệu gốc');
   });
 });
 

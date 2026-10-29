@@ -1,7 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { taoApp } from '../src/app.js';
 import { datDb, moDb } from '../src/db/connection.js';
+import { tenKyHoc } from '../src/repositories/kyHoc.js';
 
 const app = taoApp({ boQuaDangNhap: true });
 const api = () => request(app);
@@ -395,5 +398,75 @@ describe('Tạo lớp kèm lịch dạy hằng tuần', () => {
     const ds = (await api().get(`/api/lop/${id}`)).body.buoi as { ngay: string }[];
     expect(ds).toHaveLength(18);
     expect(ds.at(-1)!.ngay).toBe('2026-12-28');
+  });
+});
+
+describe('API kỳ học', () => {
+  it('tên tự sinh theo ngày bắt đầu: tháng 8–1 là HK1, tháng 2–7 là HK2', () => {
+    expect(tenKyHoc('2026-08-01')).toBe('HK1_2026-2027');
+    expect(tenKyHoc('2026-12-31')).toBe('HK1_2026-2027');
+    expect(tenKyHoc('2027-01-05')).toBe('HK1_2026-2027');
+    expect(tenKyHoc('2027-02-01')).toBe('HK2_2026-2027');
+    expect(tenKyHoc('2027-07-31')).toBe('HK2_2026-2027');
+  });
+
+  it('migration đặt lại tên kỳ cũ giống hệt cách tính trong code; trùng tên thì giữ tên cũ', () => {
+    const db = moDb(':memory:');
+    const them = db.prepare('INSERT INTO ky_hoc (ten, ngay_bat_dau) VALUES (?, ?)');
+    const ngay = ['2026-09-05', '2028-01-10', '2027-03-01', '2028-08-01']; // 4 kỳ khác nhau
+    ngay.forEach((n, i) => them.run(`Kỳ ${i}`, n));
+    them.run('Trùng', '2026-10-01'); // cùng HK1_2026-2027 với kỳ đầu
+    them.run('Không ngày', null);
+    db.exec(fs.readFileSync(path.join(import.meta.dirname, '../src/db/migrations/011_ten_ky_hoc.sql'), 'utf8'));
+    const ten = (db.prepare('SELECT ten FROM ky_hoc ORDER BY id').all() as { ten: string }[]).map((r) => r.ten);
+    expect(ten).toEqual([...ngay.map(tenKyHoc), 'Trùng', 'Không ngày']);
+  });
+
+  it('tạo, đổi ngày thì đổi tên, trùng kỳ, ngày ngược; mới nhất lên đầu', async () => {
+    const hk2 = (await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2026-02-01', ngay_ket_thuc: '2026-07-31' }).expect(201)).body;
+    expect(hk2.ten).toBe('HK2_2025-2026');
+    const hk1 = (await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2026-08-01', ngay_ket_thuc: '2027-01-31', ten: 'bị bỏ qua' }).expect(201)).body;
+    expect(hk1.ten).toBe('HK1_2026-2027');
+    await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2026-09-01' }).expect(409);
+    await api().post('/api/ky-hoc').send({}).expect(400);
+    await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2027-03-01', ngay_ket_thuc: '2027-02-01' }).expect(400);
+    await api().put(`/api/ky-hoc/${hk1.id}`).send({ ngay_ket_thuc: '2026-07-01' }).expect(400);
+    const doi = (await api().put(`/api/ky-hoc/${hk2.id}`).send({ ngay_bat_dau: '2027-02-01', ngay_ket_thuc: '2027-07-31' }).expect(200)).body;
+    expect(doi.ten).toBe('HK2_2026-2027');
+    const ds = (await api().get('/api/ky-hoc').expect(200)).body as { ten: string }[];
+    expect(ds.map((k) => k.ten)).toEqual(['HK2_2026-2027', 'HK1_2026-2027']);
+  });
+
+  it('lớp tự xếp kỳ theo ngày bắt đầu; chọn kỳ tay; xóa kỳ thì lớp về chưa xếp', async () => {
+    const hk1 = (await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2026-08-01', ngay_ket_thuc: '2027-01-31' })).body;
+    const hk2 = (await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2027-02-01', ngay_ket_thuc: '2027-07-31' })).body;
+    const tuXep = (await api().post('/api/lop').send({ ...lopMau, ngay_bat_dau: '2026-10-29' }).expect(201)).body;
+    expect(tuXep).toMatchObject({ ky_hoc_id: hk1.id, ky_hoc_ten: 'HK1_2026-2027' });
+    const ngoaiKy = (await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'Ngoai_ky', ngay_bat_dau: '2027-09-01' }).expect(201)).body;
+    expect(ngoaiKy.ky_hoc_id).toBeNull();
+    const chonTay = (await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'Chon_tay', ky_hoc_id: hk2.id }).expect(201)).body;
+    expect(chonTay.ky_hoc_id).toBe(hk2.id);
+    await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'Sai_ky', ky_hoc_id: 999 }).expect(400);
+
+    const nhanBan = (await api().post(`/api/lop/${tuXep.id}/nhan-ban`).expect(201)).body;
+    expect(nhanBan.ky_hoc_id).toBe(hk1.id);
+    expect((await api().put(`/api/lop/${nhanBan.id}`).send({ ky_hoc_id: null }).expect(200)).body.ky_hoc_id).toBeNull();
+
+    expect((await api().get('/api/ky-hoc')).body.find((k: { id: number }) => k.id === hk1.id).so_lop).toBe(1);
+    await api().delete(`/api/ky-hoc/${hk1.id}`).expect(204);
+    expect((await api().get(`/api/lop/${tuXep.id}`)).body.ky_hoc_id).toBeNull();
+  });
+
+  it('thêm các lớp đã tạo vào kỳ (cả lớp đang ở kỳ khác)', async () => {
+    const hk1 = (await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2026-08-01' })).body;
+    const hk2 = (await api().post('/api/ky-hoc').send({ ngay_bat_dau: '2027-02-01' })).body;
+    const a = (await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'A', ky_hoc_id: null })).body;
+    const b = (await api().post('/api/lop').send({ ...lopMau, ten_sheet: 'B', ky_hoc_id: hk2.id })).body;
+    const r = await api().post(`/api/ky-hoc/${hk1.id}/lop`).send({ lop_ids: [a.id, b.id] }).expect(200);
+    expect(r.body.so_lop).toBe(2);
+    const ds = (await api().get('/api/lop')).body as { ten_sheet: string; ky_hoc_id: number }[];
+    expect(ds.filter((l) => l.ky_hoc_id === hk1.id).map((l) => l.ten_sheet)).toEqual(['A', 'B']);
+    await api().post(`/api/ky-hoc/${hk1.id}/lop`).send({ lop_ids: [] }).expect(400);
+    await api().post('/api/ky-hoc/999/lop').send({ lop_ids: [a.id] }).expect(404);
   });
 });

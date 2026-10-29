@@ -11,6 +11,7 @@ import {
   suaNguoiDung,
   taoNguoiDung,
   taoPhien,
+  xoaNguoiDung,
   xoaPhien,
   type NguoiDung,
 } from '../services/taiKhoan.js';
@@ -132,4 +133,10 @@ taiKhoanRouter.put('/nguoi-dung/:id', canDangNhap, canQuanTri, (req, res) => {
   if (id === layKhongGian()!.nguoiDungId && (d.bi_khoa || d.la_quan_tri === false))
     throw new LoiApp(400, 'Không tự khóa hoặc tự bỏ quyền quản trị của mình được');
   res.json(suaNguoiDung(id, d));
+});
+
+taiKhoanRouter.delete('/nguoi-dung/:id', canDangNhap, canQuanTri, (req, res) => {
+  const { id } = zIdThamSo.parse(req.params);
+  if (id === layKhongGian()!.nguoiDungId) throw new LoiApp(400, 'Không tự xóa tài khoản của mình được');
+  res.json(xoaNguoiDung(id));
 });
