@@ -20,7 +20,7 @@ import { THU_MUC_MAU_SAN } from '../src/repositories/mauDe.js';
 import { ApiError } from '@google/genai';
 import { datNhaCungCap, goiLanLuot } from '../src/services/aiSoanCau.js';
 import { bocDe, dinhDangDiem, type CauNganHang } from '../src/services/bocDe.js';
-import { dienMau, kiemTraMau } from '../src/services/mauWord.js';
+import { datGianDong, dienMau, kiemTraMau } from '../src/services/mauWord.js';
 import { phanTichVanBan } from '../src/services/phanTichCauHoi.js';
 import { tenFileDeThi } from '../src/services/sinhDe.js';
 
@@ -169,8 +169,27 @@ describe('mẫu Word', () => {
       if (ten === 'chung.docx') expect(chu).toContain('TRƯỜNG TRUNG CẤP GIAO THÔNG CÔNG CHÍNH');
       if (ten === 'tchn.docx') expect(chu).toContain('TRƯỜNG TRUNG CẤP HÀ NỘI');
       if (ten === 'danganh.docx') expect(chu).toContain('HỘI ĐỒNG THI HỌC KỲ I');
+
+      // mọi đoạn giãn dòng Multiple 1.3, Before/After = 0
+      const xml = new PizZip(dienMau(mau, duLieu)).file('word/document.xml')!.asText();
+      const soDoan = xml.match(/<w:p[\s>]/g)!.length;
+      const gianDoan = xml.match(/<w:spacing\b(?![^>]*\bw:val=)[^>]*\/>/g)!;
+      expect(gianDoan).toHaveLength(soDoan);
+      expect(new Set(gianDoan)).toEqual(
+        new Set(['<w:spacing w:before="0" w:after="0" w:beforeAutospacing="0" w:afterAutospacing="0" w:line="312" w:lineRule="auto"/>']),
+      );
     });
   }
+
+  it('giãn dòng: thay giãn dòng cũ, giữ giãn chữ, đặt w:spacing trước w:jc', () => {
+    const G = '<w:spacing w:before="0" w:after="0" w:beforeAutospacing="0" w:afterAutospacing="0" w:line="312" w:lineRule="auto"/>';
+    expect(datGianDong('<w:p><w:pPr><w:pStyle w:val="A"/><w:spacing w:after="200"/><w:jc w:val="both"/></w:pPr></w:p>')).toBe(
+      `<w:p><w:pPr><w:pStyle w:val="A"/>${G}<w:jc w:val="both"/></w:pPr></w:p>`,
+    );
+    expect(datGianDong('<w:p w:rsidR="1"><w:r><w:rPr><w:spacing w:val="-10"/></w:rPr></w:r></w:p><w:p/><w:p><w:pPr/></w:p>')).toBe(
+      `<w:p w:rsidR="1"><w:pPr>${G}</w:pPr><w:r><w:rPr><w:spacing w:val="-10"/></w:rPr></w:r></w:p><w:p><w:pPr>${G}</w:pPr></w:p><w:p><w:pPr>${G}</w:pPr></w:p>`,
+    );
+  });
 
   it('từ chối mẫu chưa có ô {#cau}', () => {
     const mau = fs.readFileSync(path.join(THU_MUC_MAU_SAN, 'goc', 'tchn.docx'));
