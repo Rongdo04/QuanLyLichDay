@@ -123,7 +123,46 @@ describe('API lớp + buổi', () => {
 
     const { body: ds } = await api().get('/api/lop?truongId=4').expect(200);
     expect(ds[0]).toMatchObject({ ten_sheet: 'AutoCad_TT', tong: 6660, soNgay: 10, truong_ma: 'HN' });
-    expect((await api().get('/api/lop?trangThai=hoan_thanh').expect(200)).body).toHaveLength(0);
+    // chấm đủ số buổi kế hoạch → tự chuyển hoàn thành
+    expect((await api().get('/api/lop?trangThai=hoan_thanh').expect(200)).body).toHaveLength(1);
+    // bỏ chấm một ô → về đang dạy; chấm lại → hoàn thành
+    const cuoi = sau.buoi[sau.buoi.length - 1];
+    await api().patch(`/api/buoi/${cuoi.id}`).send({ chieu: false }).expect(200);
+    expect((await api().get(`/api/lop/${lop.id}`)).body.trang_thai).toBe('dang_day');
+    await api().patch(`/api/buoi/${cuoi.id}`).send({ chieu: true }).expect(200);
+    expect((await api().get(`/api/lop/${lop.id}`)).body.trang_thai).toBe('hoan_thanh');
+  });
+
+  it('tự hoàn thành: không có kế hoạch, tạm dừng, hoàn thành tay thì giữ nguyên; tăng kế hoạch không tự mở lại', async () => {
+    const { body: lop } = await api()
+      .post('/api/lop')
+      .send({ truong_id: 4, ten_sheet: 'TuXong', hoc_phan: 'Tin', don_gia: 100, so_buoi_ke_hoach: 2 })
+      .expect(201);
+    const trangThai = async () => (await api().get(`/api/lop/${lop.id}`)).body.trang_thai;
+
+    // hoàn thành tay khi chưa đủ buổi, chấm/bỏ chấm vẫn giữ
+    await api().put(`/api/lop/${lop.id}`).send({ trang_thai: 'hoan_thanh' }).expect(200);
+    const { body: b1 } = await api().post('/api/buoi').send({ lop_id: lop.id, ngay: '2026-10-01', sang: 1 }).expect(201);
+    await api().patch(`/api/buoi/${b1.id}`).send({ sang: 0 }).expect(200);
+    expect(await trangThai()).toBe('hoan_thanh');
+
+    // tạm dừng: đủ buổi vẫn tạm dừng
+    await api().put(`/api/lop/${lop.id}`).send({ trang_thai: 'tam_dung' }).expect(200);
+    await api().patch(`/api/buoi/${b1.id}`).send({ sang: 1, chieu: 1 }).expect(200);
+    expect(await trangThai()).toBe('tam_dung');
+
+    // đang dạy, đủ 2/2 sẵn; giảm kế hoạch về 1 → hoàn thành; xóa ngày → đang dạy
+    await api().put(`/api/lop/${lop.id}`).send({ trang_thai: 'dang_day', so_buoi_ke_hoach: 3 }).expect(200);
+    expect(await trangThai()).toBe('dang_day');
+    await api().put(`/api/lop/${lop.id}`).send({ so_buoi_ke_hoach: 2 }).expect(200);
+    expect(await trangThai()).toBe('hoan_thanh');
+    await api().delete(`/api/buoi/${b1.id}`).expect(204);
+    expect(await trangThai()).toBe('dang_day');
+
+    // không có kế hoạch: không tự đổi
+    await api().put(`/api/lop/${lop.id}`).send({ so_buoi_ke_hoach: null }).expect(200);
+    await api().post('/api/buoi').send({ lop_id: lop.id, ngay: '2026-10-02', sang: 1, chieu: 1 }).expect(201);
+    expect(await trangThai()).toBe('dang_day');
   });
 
   it('sinh lịch Thanh Trì: T5+T6 29/10 → 04/12/2026 ra 12 ngày', async () => {
