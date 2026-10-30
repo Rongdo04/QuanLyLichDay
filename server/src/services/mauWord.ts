@@ -138,6 +138,28 @@ function themDong(duLieu: DuLieuMau) {
   };
 }
 
+// Giãn dòng mọi đoạn: Multiple 1.3 (312/240), Before = After = 0
+const GIAN_DONG = '<w:spacing w:before="0" w:after="0" w:beforeAutospacing="0" w:afterAutospacing="0" w:line="312" w:lineRule="auto"/>';
+// Các thẻ đứng sau w:spacing trong w:pPr (Word đòi đúng thứ tự)
+const SAU_SPACING =
+  /<w:(ind|contextualSpacing|mirrorIndents|suppressOverlap|jc|textDirection|textAlignment|textboxTightWrap|outlineLvl|divId|cnfStyle|rPr|sectPr|pPrChange)[\s/>]/;
+
+export function datGianDong(xml: string): string {
+  return (
+    xml
+      // bỏ giãn dòng cũ của đoạn (giữ <w:spacing w:val> giãn chữ trong w:rPr)
+      .replace(/<w:spacing\b(?![^>]*\bw:val=)[^>]*\/>/g, '')
+      .replace(/<w:pPr\/>/g, '<w:pPr></w:pPr>')
+      .replace(/<w:pPr>([\s\S]*?)<\/w:pPr>/g, (_, trong: string) => {
+        const i = trong.search(SAU_SPACING);
+        return i < 0 ? `<w:pPr>${trong}${GIAN_DONG}</w:pPr>` : `<w:pPr>${trong.slice(0, i)}${GIAN_DONG}${trong.slice(i)}</w:pPr>`;
+      })
+      // đoạn chưa có w:pPr
+      .replace(/<w:p(\s[^>]*)?\/>/g, (_, tt = '') => `<w:p${tt}><w:pPr>${GIAN_DONG}</w:pPr></w:p>`)
+      .replace(/<w:p(\s[^>]*)?>(?!<w:pPr[\s/>])/g, (_, tt = '') => `<w:p${tt}><w:pPr>${GIAN_DONG}</w:pPr>`)
+  );
+}
+
 export function dienMau(mau: Buffer, duLieu: DuLieuMau): Buffer {
   const doc = taoDocx(mau);
   try {
@@ -145,7 +167,9 @@ export function dienMau(mau: Buffer, duLieu: DuLieuMau): Buffer {
   } catch (e) {
     throw new LoiApp(400, `Không điền được mẫu Word: ${moTaLoi(e)}`);
   }
-  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+  const zip = doc.getZip();
+  zip.file('word/document.xml', datGianDong(zip.file('word/document.xml')!.asText()));
+  return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
 // Kiểm tra mẫu tải lên: đọc được, có vòng lặp đề và câu hỏi
