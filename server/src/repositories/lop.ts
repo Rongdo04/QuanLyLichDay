@@ -157,6 +157,26 @@ export function suaLop(id: number, d: Partial<DuLieuLop>): LopDayDu {
   return layLop(id)!;
 }
 
+// Tổng ô sáng + chiều đã chấm của lớp
+export function soBuoiDaDay(lopId: number): number {
+  const r = layDb()
+    .prepare('SELECT COALESCE(SUM((sang <> 0) + (chieu <> 0)), 0) AS n FROM buoi WHERE lop_id = ?')
+    .get(lopId) as { n: number };
+  return r.n;
+}
+
+// Chấm đủ số buổi kế hoạch → tự chuyển "hoàn thành". Truyền daDayTruoc (số buổi trước khi sửa) thì
+// bỏ chấm làm tụt từ đủ xuống thiếu → trả về "đang dạy". Lớp "tạm dừng" và lớp không có kế hoạch giữ nguyên.
+export function dongBoTrangThai(lopId: number, daDayTruoc?: number) {
+  const lop = layLop(lopId);
+  const keHoach = lop?.so_buoi_ke_hoach;
+  if (!lop || !keHoach) return;
+  const daDay = soBuoiDaDay(lopId);
+  if (lop.trang_thai === 'dang_day' && daDay >= keHoach) capNhat('lop', lopId, { trang_thai: 'hoan_thanh' });
+  else if (lop.trang_thai === 'hoan_thanh' && daDayTruoc !== undefined && daDayTruoc >= keHoach && daDay < keHoach)
+    capNhat('lop', lopId, { trang_thai: 'dang_day' });
+}
+
 export function xoaLop(id: number) {
   xoa('lop', id);
 }

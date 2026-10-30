@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { layDb } from '../db/connection.js';
 import { buoiCuaLop, taoNhieuBuoi } from '../repositories/buoi.js';
 import { layCaiDat } from '../repositories/caiDat.js';
-import { chiTietLop, dsLop, layLop, nhanBanLop, suaLop, taoLop, xoaLop } from '../repositories/lop.js';
+import { chiTietLop, dongBoTrangThai, dsLop, layLop, nhanBanLop, suaLop, taoLop, xoaLop } from '../repositories/lop.js';
 import { doiLichTheoMau, sinhLichChiTiet, soBuoiDuKien, type DuKien } from '../services/sinhLich.js';
 import { khongTimThay, LoiApp } from '../utils/loi.js';
 import { moTaThu, phanTichLichPhanCong, taoLichPhanCong } from '../utils/lichPhanCong.js';
@@ -136,8 +136,15 @@ lopRouter.put('/:id', (req, res) => {
   const { id } = zIdThamSo.parse(req.params);
   const cu = layLopHoac404(id);
   const { dong_bo_lich, keo_dai_lich, ...d } = schemaSuaLop.parse(req.body);
+  // Đổi số buổi kế hoạch (không đổi tay trạng thái) → lớp đã chấm đủ thì tự chuyển "hoàn thành"
+  const doiKeHoach =
+    d.so_buoi_ke_hoach !== undefined &&
+    d.so_buoi_ke_hoach !== cu.so_buoi_ke_hoach &&
+    (d.trang_thai ?? cu.trang_thai) === cu.trang_thai;
   if (!dong_bo_lich) {
-    res.json(suaLop(id, d));
+    suaLop(id, d);
+    if (doiKeHoach) dongBoTrangThai(id);
+    res.json(layLop(id));
     return;
   }
   const lichTuan = d.lich_tuan !== undefined ? d.lich_tuan : cu.lich_tuan;
@@ -169,11 +176,13 @@ lopRouter.put('/:id', (req, res) => {
     const doiDuKien = db.prepare('UPDATE buoi SET du_kien = ? WHERE id = ?');
     for (const b of kq.doiDuKien) doiDuKien.run(b.du_kien, b.id);
     taoNhieuBuoi(id, kq.them);
-    return suaLop(id, {
+    suaLop(id, {
       ...d,
       ...(tuViet ? { lich_phan_cong: kq.lich.length ? taoLichPhanCong(thu, kq.lich[0]) : moTaThu(thu) } : {}),
       ngay_ket_thuc: (keo_dai_lich ? kq.ketThuc : ketThuc) ?? kq.ketThuc,
     });
+    if (doiKeHoach) dongBoTrangThai(id);
+    return layLop(id)!;
   })();
   res.json({
     ...lop,
