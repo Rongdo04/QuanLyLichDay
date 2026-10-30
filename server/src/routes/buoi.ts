@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { dsBuoi, layBuoi, suaBuoi, taoBuoi, xoaBuoi } from '../repositories/buoi.js';
-import { layLop } from '../repositories/lop.js';
+import { dongBoTrangThai, layLop, soBuoiDaDay } from '../repositories/lop.js';
 import { khongTimThay, LoiApp } from '../utils/loi.js';
 import { z, zChuoiTuyChon, zCo, zId, zIdThamSo, zNgay, zQueryId, zQueryNgay } from '../utils/zod.js';
 
@@ -43,18 +43,27 @@ buoiRouter.get('/', (req, res) => {
 buoiRouter.post('/', (req, res) => {
   const d = schemaTaoBuoi.parse(req.body);
   if (!layLop(d.lop_id)) throw new LoiApp(400, 'Lớp không tồn tại');
-  res.status(201).json(taoBuoi(d));
+  const buoi = taoBuoi(d);
+  dongBoTrangThai(d.lop_id);
+  res.status(201).json(buoi);
 });
 
 buoiRouter.patch('/:id', (req, res) => {
   const { id } = zIdThamSo.parse(req.params);
-  if (!layBuoi(id)) throw khongTimThay('ngày dạy');
-  res.json(suaBuoi(id, schemaSuaBuoi.parse(req.body)));
+  const cu = layBuoi(id);
+  if (!cu) throw khongTimThay('ngày dạy');
+  const truoc = soBuoiDaDay(cu.lop_id);
+  const buoi = suaBuoi(id, schemaSuaBuoi.parse(req.body));
+  dongBoTrangThai(cu.lop_id, truoc);
+  res.json(buoi);
 });
 
 buoiRouter.delete('/:id', (req, res) => {
   const { id } = zIdThamSo.parse(req.params);
-  if (!layBuoi(id)) throw khongTimThay('ngày dạy');
+  const cu = layBuoi(id);
+  if (!cu) throw khongTimThay('ngày dạy');
+  const truoc = soBuoiDaDay(cu.lop_id);
   xoaBuoi(id);
+  dongBoTrangThai(cu.lop_id, truoc);
   res.status(204).end();
 });
